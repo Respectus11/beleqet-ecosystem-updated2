@@ -8,6 +8,10 @@ build/
 out/
 *.tsbuildinfo
 frontend/dist-test/
+frontend/.next/
+frontend/out/
+server/dist/
+server/build/
 
 # Environment variables & secrets
 .env
