@@ -47,6 +47,9 @@ model User {
   cvDraft               CvDraft?
   clientFeedback        Json?
   skillVerified         Boolean             @default(false)
+  referralsGiven        Referral[]          @relation("ReferralReferrer")
+  referralsReceived     Referral[]          @relation("ReferralReferred")
+  jobAlerts             JobAlert[]
 
   @@map("users")
 }
@@ -607,4 +610,59 @@ enum NotificationChannel {
   IN_APP
   TELEGRAM
   EMAIL
+}
+
+// ── Referrals ──────────────────────────────────────────────────────────────
+
+model Referral {
+  id           String         @id @default(uuid())
+  referrerId   String
+  referredId   String?
+  code         String         @unique
+  status       ReferralStatus @default(PENDING)
+  /// Bonus amount in minor units (e.g. cents / santim)
+  bonusAmount  Int            @default(0)
+  /// ISO 4217 currency code (e.g. ETB, USD, EUR) — multi-currency support
+  currency     String         @default("ETB")
+  expiresAt    DateTime
+  redeemedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  referrer     User           @relation("ReferralReferrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred     User?          @relation("ReferralReferred", fields: [referredId], references: [id], onDelete: SetNull)
+
+  @@index([referrerId])
+  @@index([code])
+  @@index([status, expiresAt])
+  @@map("referrals")
+}
+
+// ── Job Alerts ─────────────────────────────────────────────────────────────
+
+model JobAlert {
+  id         String   @id @default(uuid())
+  userId     String
+  keywords   String[]
+  location   String?
+  jobType    JobType?
+  /// Minimum salary in minor units — multi-currency support
+  minSalary  Int?
+  /// ISO 4217 currency code
+  currency   String   @default("ETB")
+  isActive   Boolean  @default(true)
+  lastSentAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+  @@map("job_alerts")
+}
+
+enum ReferralStatus {
+  PENDING
+  REDEEMED
+  EXPIRED
+  CANCELLED
 }
