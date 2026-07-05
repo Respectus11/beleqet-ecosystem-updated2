@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { IAuditLogger } from '../interfaces/audit-logger.interface';
 
@@ -13,7 +14,12 @@ export class PrismaAuditLogger implements IAuditLogger {
     payload: Record<string, unknown>,
   ): Promise<void> {
     await this.prisma.eventLog.create({
-      data: { eventType, entityId, entityType: 'User', payload },
+      data: {
+        eventType,
+        entityId,
+        entityType: 'User',
+        payload: payload as Prisma.InputJsonValue,
+      },
     });
   }
 }
