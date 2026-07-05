@@ -69,4 +69,48 @@ describe('AnomalySensorService', () => {
       expect(alertingService.dispatchAlert).not.toHaveBeenCalled();
     });
   });
+
+  describe('handlePaymentInitiated', () => {
+    it('should trigger alert on Z-Score > 2.5', async () => {
+      // Mock history: 3 transactions of amount 100
+      (prismaService.escrowTransaction.findMany as jest.Mock).mockResolvedValue([
+        { grossAmount: 100 } as any,
+        { grossAmount: 100 } as any,
+        { grossAmount: 100 } as any,
+      ]);
+
+      // A gross amount of 1000 will be way above the mean of 100 with 0 stddev
+      await service.handlePaymentInitiated({
+        escrowId: 'escrow-1',
+        clientId: 'client-1',
+        grossAmount: 1000,
+        currency: 'ETB',
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(alertingService.dispatchAlert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          severity: 'CRITICAL',
+          title: 'Suspicious Payment Transaction',
+        })
+      );
+      expect(prismaService.eventLog.create).toHaveBeenCalled();
+    });
+
+    it('should not trigger alert on Z-Score <= 2.5 or insufficient history', async () => {
+      (prismaService.escrowTransaction.findMany as jest.Mock).mockResolvedValue([
+        { grossAmount: 100 } as any,
+      ]); // Only 1 past transaction
+
+      await service.handlePaymentInitiated({
+        escrowId: 'escrow-2',
+        clientId: 'client-1',
+        grossAmount: 1000,
+        currency: 'ETB',
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(alertingService.dispatchAlert).not.toHaveBeenCalled();
+    });
+  });
 });
