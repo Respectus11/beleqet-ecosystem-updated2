@@ -29,3 +29,5 @@ scripts/
 
 # Frontend test build output
 frontend/dist-test/
+
+.env
