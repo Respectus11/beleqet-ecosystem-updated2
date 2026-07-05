@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment & secrets — NEVER commit real values
+.env
+.env.local
+
+
+# Testing
+coverage/
+*.lcov
+.nyc_output/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+
+# Prisma
+# (schema.prisma and migrations/ SHOULD be committed — only ignore local overrides)
+prisma/*.db
+prisma/dev.db
+
+# IDE / editor
+.vscode/
+.idea/
+
+

@@ -97,6 +97,7 @@ import { ContactModule } from './modules/contact/contact.module';
     UploadsModule,
     TelegramModule,
     ContactModule,
+    AuthModule,
   ],
 })
 export class AppModule {}
