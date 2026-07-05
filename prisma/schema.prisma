@@ -29,6 +29,7 @@ model User {
   location              String?
   portfolioUrl          String?
   skills                String[]            @default([])
+  oauthAccounts         OAuthAccount[]
   applications          Application[]
   bids                  Bid[]
   candidateScores       CandidateScore[]
