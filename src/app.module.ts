@@ -24,6 +24,9 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { ContactModule } from './modules/contact/contact.module';
 
+// ── Injecting Your Performance Module ──────────────────────────────────
+import { PerformanceWorkerModule } from './modules/performance-worker/performance-worker.module';
+
 @Module({
   imports: [
     // ── Configuration (loads .env) ─────────────────────────────────────────
@@ -97,6 +100,9 @@ import { ContactModule } from './modules/contact/contact.module';
     UploadsModule,
     TelegramModule,
     ContactModule,
+    
+    // ── Registered Active Task Target Here ─────────────────────────────────
+    PerformanceWorkerModule,
   ],
 })
 export class AppModule {}
