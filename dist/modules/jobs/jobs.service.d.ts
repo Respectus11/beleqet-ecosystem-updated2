@@ -66,6 +66,7 @@ export declare class JobsService {
         jobSite: string | null;
         qualification: string | null;
         salaryType: string | null;
+        interviewDurationMinutes: number;
         urgent: boolean;
         vacancies: number | null;
         yearsOfExperience: string | null;
@@ -139,6 +140,7 @@ export declare class JobsService {
             jobSite: string | null;
             qualification: string | null;
             salaryType: string | null;
+            interviewDurationMinutes: number;
             urgent: boolean;
             vacancies: number | null;
             yearsOfExperience: string | null;
@@ -209,6 +211,7 @@ export declare class JobsService {
         jobSite: string | null;
         qualification: string | null;
         salaryType: string | null;
+        interviewDurationMinutes: number;
         urgent: boolean;
         vacancies: number | null;
         yearsOfExperience: string | null;
@@ -244,6 +247,7 @@ export declare class JobsService {
         jobSite: string | null;
         qualification: string | null;
         salaryType: string | null;
+        interviewDurationMinutes: number;
         urgent: boolean;
         vacancies: number | null;
         yearsOfExperience: string | null;
@@ -279,6 +283,7 @@ export declare class JobsService {
         jobSite: string | null;
         qualification: string | null;
         salaryType: string | null;
+        interviewDurationMinutes: number;
         urgent: boolean;
         vacancies: number | null;
         yearsOfExperience: string | null;
@@ -324,6 +329,7 @@ export declare class JobsService {
         jobSite: string | null;
         qualification: string | null;
         salaryType: string | null;
+        interviewDurationMinutes: number;
         urgent: boolean;
         vacancies: number | null;
         yearsOfExperience: string | null;

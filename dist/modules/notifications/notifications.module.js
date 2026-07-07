@@ -11,14 +11,15 @@ const common_1 = require("@nestjs/common");
 const bull_1 = require("@nestjs/bull");
 const queues_constants_1 = require("../queues/queues.constants");
 const notifications_processor_1 = require("./notifications.processor");
+const notifications_service_1 = require("./notifications.service");
 let NotificationsModule = class NotificationsModule {
 };
 exports.NotificationsModule = NotificationsModule;
 exports.NotificationsModule = NotificationsModule = __decorate([
     (0, common_1.Module)({
         imports: [bull_1.BullModule.registerQueue({ name: queues_constants_1.QUEUE_NAMES.NOTIFICATIONS })],
-        providers: [notifications_processor_1.NotificationsProcessor],
-        exports: [notifications_processor_1.NotificationsProcessor],
+        providers: [notifications_processor_1.NotificationsProcessor, notifications_service_1.NotificationsService],
+        exports: [notifications_processor_1.NotificationsProcessor, notifications_service_1.NotificationsService],
     })
 ], NotificationsModule);
 //# sourceMappingURL=notifications.module.js.map

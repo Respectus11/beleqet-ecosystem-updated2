@@ -1,0 +1,24 @@
+{
+  "availability": {
+    "invalidRange": "የመጨረሻ ሰዓት ከመጀመሪያ ሰዓት በኋላ መሆን አለበት",
+    "overlap": "የተመዘገበ የጊዜ ክልል ጋር ይጋጫል",
+    "employerUnavailable": "ቀጣሪው በዚህ የጊዜ ክልል አይገኝም።",
+    "candidateUnavailable": "እጩው በዚህ የጊዜ ክልል አይገኝም።"
+  },
+
+  "interview": {
+    "applicationNotFound": "ማመልከቻው አልተገኘም",
+    "alreadyScheduled": "ቃለ መጠይቁ አስቀድሞ ተይዟል",
+    "candidateBusy": "እጩው በዚህ ጊዜ ሌላ ቃለ መጠይቅ አለው",
+    "employerBusy": "ቀጣሪው በዚህ ጊዜ ሌላ ቃለ መጠይቅ አለው",
+    "candidateUnavailable": "እጩው በዚህ ጊዜ አይገኝም",
+    "employerUnavailable": "ቀጣሪው በዚህ ጊዜ አይገኝም",
+    "forbidden": "ይህን ቃለ መጠይቅ ለማስያዝ ፍቃድ የለዎትም"
+  },
+
+  "notification": {
+    "scheduledTitle": "ቃለ መጠይቅ ተይዟል",
+    "scheduledBody": "\"{{jobTitle}}\" ስራ የቃለ መጠይቅ ጊዜ ተይዟል።",
+    "employerScheduledBody": "ቃለ መጠይቁ በተሳካ ሁኔታ ተይዟል።"
+  }
+}
