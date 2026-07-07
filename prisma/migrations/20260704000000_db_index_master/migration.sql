@@ -1,3 +1,54 @@
+-- CreateEnum
+CREATE TYPE "ReferralStatus" AS ENUM ('PENDING', 'REDEEMED', 'EXPIRED', 'CANCELLED');
+
+-- CreateTable: referrals (model exists in schema.prisma but no migration created it)
+CREATE TABLE "referrals" (
+    "id" TEXT NOT NULL,
+    "referrerId" TEXT NOT NULL,
+    "referredId" TEXT,
+    "code" TEXT NOT NULL,
+    "status" "ReferralStatus" NOT NULL DEFAULT 'PENDING',
+    "bonusAmount" INTEGER NOT NULL DEFAULT 0,
+    "currency" TEXT NOT NULL DEFAULT 'ETB',
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "redeemedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "referrals_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable: job_alerts (model exists in schema.prisma but no migration created it)
+CREATE TABLE "job_alerts" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "keywords" TEXT[],
+    "location" TEXT,
+    "jobType" "JobType",
+    "minSalary" INTEGER,
+    "currency" TEXT NOT NULL DEFAULT 'ETB',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "lastSentAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "job_alerts_pkey" PRIMARY KEY ("id")
+);
+
+-- Unique constraint for Referral.code
+CREATE UNIQUE INDEX "referrals_code_key" ON "referrals"("code");
+
+-- Indexes matching Prisma @@index annotations
+CREATE INDEX "referrals_referrerId_idx" ON "referrals"("referrerId");
+CREATE INDEX "referrals_status_expiresAt_idx" ON "referrals"("status", "expiresAt");
+CREATE INDEX "job_alerts_userId_idx" ON "job_alerts"("userId");
+CREATE INDEX "job_alerts_isActive_idx" ON "job_alerts"("isActive");
+
+-- Foreign keys
+ALTER TABLE "referrals" ADD CONSTRAINT "referrals_referrerId_fkey" FOREIGN KEY ("referrerId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "referrals" ADD CONSTRAINT "referrals_referredId_fkey" FOREIGN KEY ("referredId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "job_alerts" ADD CONSTRAINT "job_alerts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
 -- ============================================================
 -- DB Index Master — Strategic PostgreSQL Indexing Migration
 -- Beleqet Ecosystem · Performance & Network Task
@@ -187,8 +238,8 @@ CREATE INDEX IF NOT EXISTS "idx_wallet_tx_created_at_brin"
 -- Look-up by code (most common entry point)
 -- Already have @@index([referralCode]) from Prisma, but make it partial
 CREATE INDEX IF NOT EXISTS "idx_referrals_code_active"
-  ON "referrals" ("referralCode")
-  WHERE "status" IN ('PENDING', 'APPLIED');
+  ON "referrals" ("code")
+  WHERE "status" = 'PENDING';
 
 -- Expiry sweeper
 CREATE INDEX IF NOT EXISTS "idx_referrals_expires_at"
@@ -206,8 +257,7 @@ CREATE INDEX IF NOT EXISTS "idx_referrals_created_at_brin"
 
 -- Find valid tokens by value quickly
 CREATE INDEX IF NOT EXISTS "idx_refresh_tokens_expires"
-  ON "refresh_tokens" ("expiresAt")
-  WHERE "expiresAt" > NOW();
+  ON "refresh_tokens" ("expiresAt");
 
 
 -- ─────────────────────────────────────────────────────────────
