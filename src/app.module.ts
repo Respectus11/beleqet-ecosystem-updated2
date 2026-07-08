@@ -9,6 +9,7 @@ import * as path from 'path';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { RedisModule } from './modules/redis/redis.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { ScreeningModule } from './modules/screening/screening.module';
@@ -23,12 +24,10 @@ import { ChatModule } from './modules/chat/chat.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { ContactModule } from './modules/contact/contact.module';
-<<<<<<< HEAD
 import { AnomalySensorModule } from './modules/anomaly-sensor/anomaly-sensor.module';
-=======
 import { DbIndexMasterModule } from './modules/db-index-master/db-index-master.module';
 import { PaymentsModule } from './modules/payments/payments.module';
->>>>>>> upstream/main
+import { TwoFactorModule } from './modules/two-factor/two-factor.module';
 
 @Module({
   imports: [
@@ -86,6 +85,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     }),
 
     // ── Feature modules ────────────────────────────────────────────────────
+    RedisModule,
     PrismaModule,
     QueuesModule,
     AuthModule,
@@ -106,6 +106,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     AnomalySensorModule,
     DbIndexMasterModule,
     PaymentsModule,
+    TwoFactorModule,
   ],
 })
 export class AppModule {}
