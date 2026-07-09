@@ -20,6 +20,11 @@ import {
  *
  * Default model: `llama-3.1-8b-instant` (matches the frontend default).
  */
+/** Fail an AI request that hasn't completed within this many ms. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+/** SDK-level retries for transient network / 5xx / 429 errors. */
+const DEFAULT_MAX_RETRIES = 2;
+
 @Injectable()
 export class GroqProvider implements AiChatProvider {
   readonly name = 'groq';
@@ -35,6 +40,17 @@ export class GroqProvider implements AiChatProvider {
       baseURL: this.config.get<string>(
         'GROQ_BASE_URL',
         'https://api.groq.com/openai/v1',
+      ),
+      // Bound every request so a hung upstream can never block the API
+      // indefinitely; the SDK aborts and surfaces an APIConnectionTimeoutError
+      // which we map to 503. Retries cover transient network/5xx/429 blips.
+      timeout: this.config.get<number>(
+        'GROQ_TIMEOUT_MS',
+        DEFAULT_REQUEST_TIMEOUT_MS,
+      ),
+      maxRetries: this.config.get<number>(
+        'GROQ_MAX_RETRIES',
+        DEFAULT_MAX_RETRIES,
       ),
     });
   }
@@ -65,8 +81,19 @@ export class GroqProvider implements AiChatProvider {
     } catch (err) {
       if (err instanceof AiProviderError) throw err;
 
+      // A request that exceeded `timeout` (or ran out of retries on a network
+      // fault) surfaces as an APIConnectionTimeoutError / APIConnectionError
+      // with no HTTP status — treat those as a 503 (service unavailable).
+      if (
+        err instanceof OpenAI.APIConnectionTimeoutError ||
+        err instanceof OpenAI.APIConnectionError
+      ) {
+        this.logger.warn(`Groq request timed out / unreachable: ${(err as Error).message}`);
+        throw new AiProviderError(503, 'Groq request timed out');
+      }
+
       // Translate an OpenAI-SDK APIError (Groq is wire-compatible) into our
-      // transport-agnostic error, preserving the upstream status.
+      // transport-agnostic error, preserving the upstream status (e.g. 429).
       const status =
         err instanceof OpenAI.APIError && typeof err.status === 'number'
           ? err.status
