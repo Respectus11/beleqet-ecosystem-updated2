@@ -4,6 +4,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { KycDocumentType, KycStatus } from '@prisma/client';
 import { ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { KycModule } from './kyc.module';
+import { ConfigService } from '@nestjs/config';
 
 const mockPrismaService = {
   kycVerification: {
@@ -142,6 +144,49 @@ describe('KycService', () => {
         where: { id: 'user-1' },
         data: { kycVerified: false },
       });
+    });
+  });
+
+  describe('KycModule KycProvider Factory', () => {
+    let factory: Function;
+
+    beforeAll(() => {
+      const providers = Reflect.getMetadata('providers', KycModule);
+      const providerObj = providers.find((p: any) => p && p.provide === 'KycProvider');
+      factory = providerObj.useFactory;
+    });
+
+    it('should fall back to MockKycProvider in non-production environments if API key is missing', () => {
+      const mockConfig = {
+        get: jest.fn((key: string) => {
+          if (key === 'NODE_ENV') return 'development';
+          if (key === 'OPENAI_API_KEY') return '';
+          return null;
+        }),
+      } as unknown as ConfigService;
+
+      const mockProvider = {} as any;
+      const openaiProvider = {} as any;
+
+      const result = factory(mockConfig, mockProvider, openaiProvider);
+      expect(result).toBe(mockProvider);
+    });
+
+    it('should throw an error in production environment if API key is missing', () => {
+      const mockConfig = {
+        get: jest.fn((key: string) => {
+          if (key === 'NODE_ENV') return 'production';
+          if (key === 'OPENAI_API_KEY') return '';
+          return null;
+        }),
+      } as unknown as ConfigService;
+
+      const mockProvider = {} as any;
+      const openaiProvider = {} as any;
+
+      expect(() => factory(mockConfig, mockProvider, openaiProvider)).toThrow(
+        /OPENAI_API_KEY is missing or set to a dummy value in production environment/
+      );
     });
   });
 });

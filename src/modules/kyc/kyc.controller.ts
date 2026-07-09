@@ -71,10 +71,28 @@ export class KycController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Submit ID card and live face scan files for identity verification' })
   @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'document', maxCount: 1 },
-      { name: 'faceScan', maxCount: 1 },
-    ]),
+    FileFieldsInterceptor(
+      [
+        { name: 'document', maxCount: 1 },
+        { name: 'faceScan', maxCount: 1 },
+      ],
+      {
+        limits: {
+          fileSize: 5 * 1024 * 1024, // 5MB limit
+        },
+        fileFilter: (req, file, callback) => {
+          if (!file.mimetype.match(/^image\/(jpeg|png|webp|gif)$/)) {
+            return callback(
+              new BadRequestException(
+                `Only image files (JPEG, PNG, WEBP, GIF) are allowed for KYC verification. Got invalid type: ${file.mimetype}`,
+              ),
+              false,
+            );
+          }
+          callback(null, true);
+        },
+      },
+    ),
   )
   async submitKyc(
     @UploadedFiles()
@@ -90,6 +108,17 @@ export class KycController {
 
     if (!documentFile || !faceScanFile) {
       throw new BadRequestException('Both identification document and live face scan files must be uploaded.');
+    }
+
+    if (documentFile.buffer.length > 5 * 1024 * 1024 || faceScanFile.buffer.length > 5 * 1024 * 1024) {
+      throw new BadRequestException('File size exceeds the maximum limit of 5MB.');
+    }
+
+    if (
+      !documentFile.mimetype.match(/^image\/(jpeg|png|webp|gif)$/) ||
+      !faceScanFile.mimetype.match(/^image\/(jpeg|png|webp|gif)$/)
+    ) {
+      throw new BadRequestException('Only image files (JPEG, PNG, WEBP, GIF) are allowed for KYC verification.');
     }
 
     return this.kycService.submitVerification(

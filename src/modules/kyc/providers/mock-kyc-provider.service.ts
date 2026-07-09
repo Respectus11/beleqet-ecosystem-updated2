@@ -20,6 +20,8 @@ export class MockKycProvider implements KycProvider {
   async verify(
     documentBuffer: Buffer,
     faceScanBuffer: Buffer,
+    documentMimeType?: string,
+    faceScanMimeType?: string,
   ): Promise<KycVerificationResult> {
     this.logger.log('Executing simulated KYC verification (Mock Provider)');
 

@@ -67,6 +67,8 @@ export class KycService {
     const providerResult = await this.kycProvider.verify(
       documentFile.buffer,
       faceScanFile.buffer,
+      documentFile.mimetype,
+      faceScanFile.mimetype,
     );
 
     // Determine verification status based on thresholds

@@ -45,6 +45,32 @@ describe('KycController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should throw BadRequestException if files exceed 5MB', async () => {
+      const dto: SubmitKycDto = { documentType: KycDocumentType.PASSPORT };
+      const largeFile = { buffer: Buffer.alloc(6 * 1024 * 1024), originalname: 'large.jpg', mimetype: 'image/jpeg' } as KycUploadFile;
+      const files = {
+        document: [largeFile],
+        faceScan: [mockFile],
+      };
+
+      await expect(
+        controller.submitKyc(files, mockUser, dto),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if files are not image mimetypes', async () => {
+      const dto: SubmitKycDto = { documentType: KycDocumentType.PASSPORT };
+      const invalidFile = { buffer: Buffer.from('test'), originalname: 'doc.pdf', mimetype: 'application/pdf' } as KycUploadFile;
+      const files = {
+        document: [invalidFile],
+        faceScan: [mockFile],
+      };
+
+      await expect(
+        controller.submitKyc(files, mockUser, dto),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should submit verification details when valid files are uploaded', async () => {
       const dto: SubmitKycDto = { documentType: KycDocumentType.PASSPORT };
       mockKycService.submitVerification.mockResolvedValue({ status: KycStatus.APPROVED });

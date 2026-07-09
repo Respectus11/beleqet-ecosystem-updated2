@@ -28,6 +28,8 @@ export class OpenAiKycProvider implements KycProvider {
   async verify(
     documentBuffer: Buffer,
     faceScanBuffer: Buffer,
+    documentMimeType?: string,
+    faceScanMimeType?: string,
   ): Promise<KycVerificationResult> {
     this.logger.log('Executing OpenAI Vision KYC verification');
 
@@ -40,6 +42,9 @@ export class OpenAiKycProvider implements KycProvider {
     try {
       const documentBase64 = documentBuffer.toString('base64');
       const faceScanBase64 = faceScanBuffer.toString('base64');
+
+      const docMime = documentMimeType || this.detectMimeType(documentBuffer);
+      const faceMime = faceScanMimeType || this.detectMimeType(faceScanBuffer);
 
       const model = this.config.get<string>('OPENAI_MODEL', 'gpt-4o-mini');
 
@@ -79,13 +84,13 @@ export class OpenAiKycProvider implements KycProvider {
               {
                 type: 'image_url',
                 image_url: {
-                  url: `data:image/jpeg;base64,${documentBase64}`,
+                  url: `data:${docMime};base64,${documentBase64}`,
                 },
               },
               {
                 type: 'image_url',
                 image_url: {
-                  url: `data:image/jpeg;base64,${faceScanBase64}`,
+                  url: `data:${faceMime};base64,${faceScanBase64}`,
                 },
               },
             ],
@@ -116,6 +121,46 @@ export class OpenAiKycProvider implements KycProvider {
         rejectionReason: `AI processing failed: ${(err as Error).message}`,
       };
     }
+  }
+
+  /**
+   * Helper to detect file MIME type from buffer headers.
+   */
+  private detectMimeType(buffer: Buffer): string {
+    if (buffer.length >= 4) {
+      if (
+        buffer[0] === 0x89 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x4e &&
+        buffer[3] === 0x47
+      ) {
+        return 'image/png';
+      }
+      if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        return 'image/jpeg';
+      }
+      if (
+        buffer[0] === 0x52 && // R
+        buffer[1] === 0x49 && // I
+        buffer[2] === 0x46 && // F
+        buffer[3] === 0x46 && // F
+        buffer.length >= 12 &&
+        buffer[8] === 0x57 && // W
+        buffer[9] === 0x45 && // E
+        buffer[10] === 0x42 && // B
+        buffer[11] === 0x50 // P
+      ) {
+        return 'image/webp';
+      }
+      if (
+        buffer[0] === 0x47 &&
+        buffer[1] === 0x49 &&
+        buffer[2] === 0x46
+      ) {
+        return 'image/gif';
+      }
+    }
+    return 'image/jpeg'; // fallback default
   }
 
   /**

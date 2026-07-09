@@ -30,5 +30,7 @@ export interface KycProvider {
   verify(
     documentBuffer: Buffer,
     faceScanBuffer: Buffer,
+    documentMimeType?: string,
+    faceScanMimeType?: string,
   ): Promise<KycVerificationResult>;
 }
