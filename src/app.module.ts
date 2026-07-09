@@ -26,6 +26,10 @@ import { TelegramModule } from './modules/telegram/telegram.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { AdminStatsModule } from './modules/admin-stats/admin-stats.module';
 import { DisputeManagerModule } from './modules/dispute-manager/dispute-manager.module';
+import { DbIndexMasterModule } from './modules/db-index-master/db-index-master.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { TwoFactorModule } from './modules/two-factor/two-factor.module';
+import { KycModule } from './modules/kyc/kyc.module';
 
 @Module({
   imports: [
@@ -102,6 +106,10 @@ import { DisputeManagerModule } from './modules/dispute-manager/dispute-manager.
     ContactModule,
     AdminStatsModule,
     DisputeManagerModule,
+    DbIndexMasterModule,
+    PaymentsModule,
+    TwoFactorModule,
+    KycModule,
   ],
 })
 export class AppModule { }

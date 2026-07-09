@@ -11,5 +11,12 @@
     "DISPUTE_CREATED": "Dispute created successfully",
     "INVALID_DISPUTE": "Invalid or non-existent dispute",
     "UNAUTHORIZED_DISPUTE": "You are not authorized to manage this dispute"
+  },
+  "kyc": {
+    "submitted": "KYC verification submitted successfully.",
+    "pending": "Your verification request is currently pending review.",
+    "approved": "KYC verification approved.",
+    "rejected": "KYC verification was rejected: {reason}",
+    "not_found": "No KYC record found for this account."
   }
 }
