@@ -28,6 +28,17 @@ import { AuthExceptionFilter } from './filters/auth-exception.filter';
 export const AUTH_ENV_CONFIG = Symbol('AUTH_ENV_CONFIG');
 
 /**
+ * Loaded once, synchronously, when this file is first imported. Used
+ * both to configure `JwtModule` directly (no async factory needed) and
+ * as the value bound to {@link AUTH_ENV_CONFIG} below. Avoids
+ * `JwtModule.registerAsync`, whose factory previously could not resolve
+ * `AUTH_ENV_CONFIG` since dynamic modules like `JwtModule` construct
+ * their own isolated provider scope that doesn't automatically see
+ * sibling providers declared in `AuthModule` itself.
+ */
+const authEnvConfig = loadAuthEnvConfig();
+
+/**
  * Composition root for the Social Logins module. The ONLY file that
  * touches `process.env` (via {@link loadAuthEnvConfig}) or binds
  * abstract injection tokens to concrete implementations. Every other
@@ -40,18 +51,12 @@ export const AUTH_ENV_CONFIG = Symbol('AUTH_ENV_CONFIG');
  * of the app's DI graph.
  */
 @Module({
-  imports: [
-    PrismaModule,
-    JwtModule.registerAsync({
-      useFactory: (config: AuthEnvConfig) => ({ secret: config.jwtAccessSecret }),
-      inject: [AUTH_ENV_CONFIG],
-    }),
-  ],
+  imports: [PrismaModule, JwtModule.register({ secret: authEnvConfig.jwtAccessSecret })],
   controllers: [AuthController],
   providers: [
     {
       provide: AUTH_ENV_CONFIG,
-      useFactory: (): AuthEnvConfig => loadAuthEnvConfig(),
+      useValue: authEnvConfig,
     },
     {
       provide: TOKEN_ENCRYPTION_KEY,
