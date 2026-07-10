@@ -2,9 +2,10 @@
   "extends": "./tsconfig.json",
   "exclude": [
     "node_modules",
-    "test",
     "dist",
+    "frontend",
+    "beleqet-jobs-nextjs",
     "**/*spec.ts",
-    "beleqet-jobs-nextjs" // 💡 Add this line here to ignore the Next.js app
+    "test"
   ]
 }
