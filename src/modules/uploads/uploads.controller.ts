@@ -3,7 +3,16 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadsService } from './uploads.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
+
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
 
 export class PresignedUrlDto {
   @IsString()
@@ -12,6 +21,7 @@ export class PresignedUrlDto {
 
   @IsString()
   @IsNotEmpty()
+  @IsIn(ALLOWED_MIME_TYPES, { message: 'Invalid file type. Executables and HTML files are not allowed.' })
   contentType: string;
 
   @IsString()
