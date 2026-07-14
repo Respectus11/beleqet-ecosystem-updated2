@@ -28,7 +28,7 @@ import { AdminStatsModule } from './modules/admin-stats/admin-stats.module';
 import { DisputeManagerModule } from './modules/dispute-manager/dispute-manager.module';
 import { DbIndexMasterModule } from './modules/db-index-master/db-index-master.module';
 import { PaymentsModule } from './modules/payments/payments.module';
-import { PerformanceWorkerModule } from './modules/performance-worker/performance-worker.module';
+// ── Fixed: PerformanceWorkerModule import statement deleted ──
 import { TwoFactorModule } from './modules/two-factor/two-factor.module';
 import { KycModule } from './modules/kyc/kyc.module';
 
@@ -109,7 +109,7 @@ import { KycModule } from './modules/kyc/kyc.module';
     DisputeManagerModule,
     DbIndexMasterModule,
     PaymentsModule,
-    PerformanceWorkerModule,
+    // ── Fixed: PerformanceWorkerModule removed from imports array ──
     TwoFactorModule,
     KycModule,
   ],
