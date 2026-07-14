@@ -50,15 +50,30 @@ const KEYWORD_MATCH_WEIGHT = 70;
 const CATEGORY_AFFINITY_WEIGHT = 30;
 
 /**
- * Upper bound on how many candidate jobs are ever pulled into application
- * memory for scoring in a single request. Without this cap, `getPersonalizedFeed`
- * would load the entire `jobs` table on every call, which does not scale as
- * the table grows. Candidates are pre-filtered at the database level (see
- * `buildCandidateFilter`) so this pool is already relevant, not arbitrary —
- * the cap just protects against pathological cases (e.g. a very common
- * keyword matching thousands of rows).
+ * Upper bound on how many keywords are ever used to build the DB filter.
+ * A user with a long search history + many skills could otherwise generate
+ * dozens of keywords, each contributing two `ILIKE '%...%'` clauses to the
+ * `OR` array — every one of which forces Postgres into a sequential scan
+ * (leading-wildcard ILIKE can't use a standard b-tree index). Capping bounds
+ * the query to a fixed, predictable cost regardless of how active a user is.
+ * We keep the most recent/most specific keywords by taking the tail of the
+ * (already deduplicated) extracted list, since `extractKeywords` preserves
+ * input order and search terms are appended before skills.
  */
-const CANDIDATE_POOL_SIZE = 200;
+const MAX_KEYWORDS = 12;
+
+/**
+ * Candidate pools are fetched *separately* for keyword matches and for
+ * category-affinity matches, then merged. If they were combined into one
+ * `OR` clause (as before), a broad saved category could dominate the
+ * `take` + `orderBy: createdAt desc` cutoff and push out older jobs that
+ * are a much stronger keyword match — the pool would fill with "recent in
+ * this category" rows before keyword-relevant rows ever got a chance.
+ * Keeping separate, smaller caps guarantees both signals always get
+ * representation in the pool that reaches `rankJobs`.
+ */
+const KEYWORD_POOL_SIZE = 150;
+const CATEGORY_POOL_SIZE = 50;
 
 /**
  * `AiFeedService` implements the "AI Personal Feed" recommendation logic.
@@ -112,47 +127,79 @@ export class AiFeedService {
       return this.getGenericFeed(limit);
     }
 
-    const jobs: FeedJob[] = await this.prisma.job.findMany({
-      where: {
-        status: 'PUBLISHED',
-        OR: this.buildCandidateFilter(keywords, savedCategoryIds),
-      },
-      orderBy: { createdAt: 'desc' },
-      take: CANDIDATE_POOL_SIZE,
-      include: { company: true, category: true },
-    });
+    // Bound keyword volume before it ever reaches a query — see MAX_KEYWORDS.
+    const boundedKeywords = keywords.slice(-MAX_KEYWORDS);
 
-    return this.rankJobs(jobs, keywords, savedCategoryIds).slice(0, limit);
+    const jobs = await this.fetchCandidatePool(boundedKeywords, savedCategoryIds);
+
+    return this.rankJobs(jobs, boundedKeywords, savedCategoryIds).slice(0, limit);
   }
 
   /**
-   * Builds the `OR` clause used to narrow `Job.findMany` down to a relevant
-   * candidate set at the database level, instead of fetching every published
-   * job and filtering in application memory.
+   * Fetches candidate jobs as two independent, bounded pools — one for
+   * keyword matches and one for saved-category affinity — and merges them,
+   * de-duplicated by id.
    *
-   * A job is a candidate if any keyword appears in its title/description, or
-   * its tags overlap with the keyword set, or its category is one the user
-   * has previously saved a job from. Combined with `CANDIDATE_POOL_SIZE` and
-   * `orderBy: createdAt desc` in the caller, this keeps both the query cost
-   * and the in-memory scoring cost bounded regardless of how large the
-   * overall `jobs` table grows.
+   * Keeping them separate (rather than one `OR` array with a shared `take`)
+   * prevents a broad saved category from flooding the pool with its most
+   * recent jobs and crowding out older, more specific keyword matches.
+   * Each pool has its own small cap, so the combined worst case
+   * (`KEYWORD_POOL_SIZE + CATEGORY_POOL_SIZE`) is still far smaller and more
+   * predictable than the old single 200-row pool, while guaranteeing both
+   * signals are represented.
    */
-  private buildCandidateFilter(
+  private async fetchCandidatePool(
     keywords: string[],
     savedCategoryIds: Set<string>,
-  ): Array<Record<string, unknown>> {
+  ): Promise<FeedJob[]> {
+    const [keywordJobs, categoryJobs] = await Promise.all([
+      keywords.length > 0
+        ? this.prisma.job.findMany({
+            where: { status: 'PUBLISHED', OR: this.buildKeywordFilter(keywords) },
+            orderBy: { createdAt: 'desc' },
+            take: KEYWORD_POOL_SIZE,
+            include: { company: true, category: true },
+          })
+        : Promise.resolve([]),
+      savedCategoryIds.size > 0
+        ? this.prisma.job.findMany({
+            where: { status: 'PUBLISHED', categoryId: { in: [...savedCategoryIds] } },
+            orderBy: { createdAt: 'desc' },
+            take: CATEGORY_POOL_SIZE,
+            include: { company: true, category: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const merged = new Map<string, FeedJob>();
+    for (const job of [...keywordJobs, ...categoryJobs] as FeedJob[]) {
+      merged.set(job.id, job);
+    }
+    return [...merged.values()];
+  }
+
+  /**
+   * Builds the `OR` clause for keyword-based candidate matching only.
+   * Category affinity is now fetched as its own pool (see
+   * `fetchCandidatePool`), so this no longer mixes the two signals into a
+   * single filter.
+   *
+   * NOTE: `contains`/ILIKE with a leading wildcard cannot use a standard
+   * b-tree index, so each clause here is a sequential-scan predicate.
+   * `MAX_KEYWORDS` bounds how many of these are ever issued per request.
+   * For real production scale, the durable fix is a Postgres trigram index
+   * (`pg_trgm` + `GIN (title gin_trgm_ops)` / `(description gin_trgm_ops)`),
+   * or moving to a `tsvector` full-text column — happy to add that
+   * migration if useful.
+   */
+  private buildKeywordFilter(keywords: string[]): Array<Record<string, unknown>> {
     const clauses: Array<Record<string, unknown>> = [];
 
     for (const keyword of keywords) {
       clauses.push({ title: { contains: keyword, mode: 'insensitive' } });
       clauses.push({ description: { contains: keyword, mode: 'insensitive' } });
     }
-    if (keywords.length > 0) {
-      clauses.push({ tags: { hasSome: keywords } });
-    }
-    if (savedCategoryIds.size > 0) {
-      clauses.push({ categoryId: { in: [...savedCategoryIds] } });
-    }
+    clauses.push({ tags: { hasSome: keywords } });
 
     return clauses;
   }
@@ -221,13 +268,21 @@ export class AiFeedService {
       .sort((a, b) => b.relevanceScore - a.relevanceScore);
   }
 
-  /** Computes a single job's 0-100 relevance score. */
+  /**
+   * Computes a single job's 0-100 relevance score.
+   *
+   * Keyword matching is done on whole tokens (see `tokenize`), not raw
+   * substrings, so a keyword like "net" no longer falsely matches inside
+   * "network" or "planet".
+   */
   private scoreJob(job: FeedJob, keywords: string[], savedCategoryIds: Set<string>): number {
     let score = 0;
 
     if (keywords.length > 0) {
-      const text = `${job.title} ${job.description} ${(job.tags ?? []).join(' ')}`.toLowerCase();
-      const matches = keywords.filter((keyword) => text.includes(keyword)).length;
+      const tokens = this.tokenize(
+        `${job.title} ${job.description} ${(job.tags ?? []).join(' ')}`,
+      );
+      const matches = keywords.filter((keyword) => tokens.has(keyword)).length;
       score += (matches / keywords.length) * KEYWORD_MATCH_WEIGHT;
     }
 
@@ -236,6 +291,15 @@ export class AiFeedService {
     }
 
     return Math.min(100, Math.round(score));
+  }
+
+  /**
+   * Splits text into a de-duplicated set of lower-cased word tokens, so
+   * keyword matching in `scoreJob` compares whole words instead of raw
+   * substrings.
+   */
+  private tokenize(text: string): Set<string> {
+    return new Set(text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
   }
 
   /**
