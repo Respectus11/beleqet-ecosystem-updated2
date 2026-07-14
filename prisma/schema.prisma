@@ -65,6 +65,7 @@ model User {
   /// declared on SearchHistory.user below. Not queried directly from the
   /// User side — the AI Feed module reads SearchHistory independently.
   searchHistories       SearchHistory[]
+  storedFiles           StoredFile[]
 
   @@map("users")
 }
@@ -830,4 +831,21 @@ enum KycStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+model StoredFile {
+  id                         String    @id @default(uuid())
+  key                        String    @unique
+  filename                   String
+  mimeType                   String
+  size                       Int
+  uploadedById               String?
+  hasConsentedToProcessing   Boolean   @default(false)
+  isDeleted                  Boolean   @default(false)
+  deletedAt                  DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  uploadedBy                 User?     @relation(fields: [uploadedById], references: [id])
+
+  @@map("stored_files")
 }
