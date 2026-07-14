@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, DefaultValuePipe, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CheckPlagiarismDto } from './dto/check-plagiarism.dto';
 import { PlagiarismService } from './plagiarism.service';
@@ -25,9 +25,12 @@ export class PlagiarismController {
   @Get('history')
   @ApiOperation({ summary: 'List recent plagiarism check results' })
   getHistory(
-    @Query('limit', new DefaultValuePipe(20), new ParseIntPipe({ min: 1, max: 100 }))
+    @Query('limit', new DefaultValuePipe(20), new ParseIntPipe())
     limit: number,
   ) {
+    if (limit < 1 || limit > 100) {
+      throw new BadRequestException('limit must be between 1 and 100');
+    }
     return this.plagiarismService.getHistory(limit);
   }
 
