@@ -140,6 +140,7 @@ function buildMockPrisma(walletBalance = 10_000) {
       findUnique: jest.fn().mockResolvedValue(walletRecord),
       upsert:     jest.fn().mockResolvedValue(walletRecord),
       update:     jest.fn().mockResolvedValue(walletRecord),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     employerWallet: {
       findUnique: jest.fn().mockResolvedValue(null),

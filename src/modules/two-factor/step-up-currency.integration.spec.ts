@@ -29,6 +29,7 @@ function buildMockPrisma(walletBalance = 10_000, walletCurrency = 'ETB') {
       findUnique: jest.fn().mockResolvedValue(walletRecord),
       upsert: jest.fn().mockResolvedValue(walletRecord),
       update: jest.fn().mockResolvedValue(walletRecord),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     walletTransaction: {
       create: jest.fn().mockResolvedValue(txRecord),
