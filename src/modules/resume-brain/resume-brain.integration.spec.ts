@@ -27,11 +27,13 @@ import { PDFParse } from 'pdf-parse';
 import { ResumeBrainService, UploadedResumeFile } from './resume-brain.service';
 import { DocumentParserService } from './document-parser.service';
 import { AIExtractorService } from './ai-extractor.service';
+import { AiBudgetService } from './ai-budget.service';
 import { ResumeValidatorService } from './resume-validator.service';
 import { ProfileMapperService } from './profile-mapper.service';
 import {
   AI_CHAT_PROVIDER,
   AiChatProvider,
+  AiCompletion,
 } from './ai/ai-chat-provider.interface';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -89,6 +91,14 @@ function pdfFile(): UploadedResumeFile {
   };
 }
 
+/** Wrap raw model text in the {content, usage} completion the provider returns. */
+function completion(content: string): AiCompletion {
+  return {
+    content,
+    usage: { promptTokens: 200, completionTokens: 80, totalTokens: 280 },
+  };
+}
+
 describe('Resume Brain ↔ UsersService integration (Phase 9)', () => {
   let resumeBrain: ResumeBrainService;
   let users: UsersService;
@@ -114,10 +124,17 @@ describe('Resume Brain ↔ UsersService integration (Phase 9)', () => {
       },
     } as unknown as PrismaService;
 
-    aiComplete = jest.fn().mockResolvedValue(AI_JSON);
+    aiComplete = jest.fn().mockResolvedValue(completion(AI_JSON));
     const stubProvider: AiChatProvider = {
       name: 'stub',
       complete: aiComplete,
+    };
+
+    // Budget is metered on a real Redis in production; here it is out of scope,
+    // so a no-op stub keeps the test focused on parse→extract→validate→map→save.
+    const budgetStub = {
+      assertWithinBudget: jest.fn(),
+      recordUsage: jest.fn(),
     };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -128,6 +145,7 @@ describe('Resume Brain ↔ UsersService integration (Phase 9)', () => {
         ResumeValidatorService,
         ProfileMapperService,
         UsersService,
+        { provide: AiBudgetService, useValue: budgetStub },
         { provide: AI_CHAT_PROVIDER, useValue: stubProvider },
         { provide: PrismaService, useValue: prisma },
       ],
@@ -186,7 +204,7 @@ describe('Resume Brain ↔ UsersService integration (Phase 9)', () => {
 
   it('tolerates a fenced ```json reply from the model (real-world LLM output)', async () => {
     mockPdfText(RESUME_TEXT);
-    aiComplete.mockResolvedValueOnce('```json\n' + AI_JSON + '\n```');
+    aiComplete.mockResolvedValueOnce(completion('```json\n' + AI_JSON + '\n```'));
 
     const result = await resumeBrain.extractProfile(pdfFile());
     expect(result.profile.firstName).toBe('Abebe');
@@ -199,20 +217,22 @@ describe('Resume Brain ↔ UsersService integration (Phase 9)', () => {
     mockPdfText('hello world this is not a resume at all');
     // Model honestly returns an empty profile for junk input.
     aiComplete.mockResolvedValueOnce(
-      JSON.stringify({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        summary: '',
-        headline: '',
-        location: '',
-        skills: [],
-        languages: [],
-        certifications: [],
-        education: [],
-        experience: [],
-      }),
+      completion(
+        JSON.stringify({
+          firstName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+          summary: '',
+          headline: '',
+          location: '',
+          skills: [],
+          languages: [],
+          certifications: [],
+          education: [],
+          experience: [],
+        }),
+      ),
     );
 
     await expect(resumeBrain.extractProfile(pdfFile())).rejects.toBeInstanceOf(

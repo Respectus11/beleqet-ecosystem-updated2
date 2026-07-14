@@ -26,16 +26,39 @@ export interface AiCompletionOptions {
   json?: boolean;
 }
 
+/**
+ * Token accounting for a single completion. Drives per-user cost budgeting
+ * ({@link AiBudgetService}) so we can cap spend on the paid AI provider.
+ * Providers that do not report usage should return zeros — the budgeter then
+ * counts requests only, never negative or NaN totals.
+ */
+export interface AiUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+/** A completed chat response: the assistant text plus its token accounting. */
+export interface AiCompletion {
+  content: string;
+  usage: AiUsage;
+}
+
 export interface AiChatProvider {
   /** Human-readable provider name, used in logs and for `modelUsed` metadata. */
   readonly name: string;
 
   /**
-   * Run a chat completion and return the assistant message text verbatim.
-   * Implementations MUST throw {@link AiProviderError} on failure so callers
-   * can map provider HTTP status codes to the right API response.
+   * Run a chat completion and return the assistant message text together with
+   * its token usage. Implementations MUST throw {@link AiProviderError} on
+   * failure so callers can map provider HTTP status codes to the right API
+   * response, and MUST always populate {@link AiCompletion.usage} (zeros when
+   * the provider does not report it).
    */
-  complete(messages: AiChatMessage[], options?: AiCompletionOptions): Promise<string>;
+  complete(
+    messages: AiChatMessage[],
+    options?: AiCompletionOptions,
+  ): Promise<AiCompletion>;
 }
 
 /**

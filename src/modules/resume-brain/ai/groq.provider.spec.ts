@@ -58,7 +58,7 @@ describe('GroqProvider', () => {
   it('constructs the client with a bounded timeout and retry count', () => {
     new GroqProvider(configWith({ GROQ_API_KEY: 'gsk_test' }));
     const opts = capturedClientOptions[0];
-    expect(opts.timeout).toBe(30_000);
+    expect(opts.timeout).toBe(20_000);
     expect(opts.maxRetries).toBe(2);
     expect(opts.baseURL).toBe('https://api.groq.com/openai/v1');
   });
@@ -86,14 +86,31 @@ describe('GroqProvider', () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it('returns the assistant message text on success', async () => {
+  it('returns the trimmed assistant text plus token usage on success', async () => {
     createMock.mockResolvedValueOnce({
       choices: [{ message: { content: '  {"firstName":"Abebe"}  ' } }],
+      usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 },
     });
     const provider = new GroqProvider(configWith({ GROQ_API_KEY: 'gsk_test' }));
-    await expect(provider.complete(OK_MESSAGES, { json: true })).resolves.toBe(
-      '{"firstName":"Abebe"}',
-    );
+    await expect(
+      provider.complete(OK_MESSAGES, { json: true }),
+    ).resolves.toEqual({
+      content: '{"firstName":"Abebe"}',
+      usage: { promptTokens: 120, completionTokens: 30, totalTokens: 150 },
+    });
+  });
+
+  it('defaults usage to zero when the provider omits it', async () => {
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: '{"firstName":"Abebe"}' } }],
+    });
+    const provider = new GroqProvider(configWith({ GROQ_API_KEY: 'gsk_test' }));
+    const result = await provider.complete(OK_MESSAGES);
+    expect(result.usage).toEqual({
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    });
   });
 
   it('throws 502 when the model returns an empty message', async () => {

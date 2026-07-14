@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import {
   AiChatMessage,
   AiChatProvider,
+  AiCompletion,
   AiCompletionOptions,
   AiProviderError,
 } from './ai-chat-provider.interface';
@@ -20,8 +21,13 @@ import {
  *
  * Default model: `llama-3.1-8b-instant` (matches the frontend default).
  */
-/** Fail an AI request that hasn't completed within this many ms. */
-const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Fail an AI request that hasn't completed within this many ms. Kept short for
+ * a user-facing upload flow — a resume extraction that takes longer than this
+ * is almost certainly a stuck upstream, and a 20s spinner already hurts UX.
+ * Override per environment with `GROQ_TIMEOUT_MS`.
+ */
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 /** SDK-level retries for transient network / 5xx / 429 errors. */
 const DEFAULT_MAX_RETRIES = 2;
 
@@ -58,7 +64,7 @@ export class GroqProvider implements AiChatProvider {
   async complete(
     messages: AiChatMessage[],
     options: AiCompletionOptions = {},
-  ): Promise<string> {
+  ): Promise<AiCompletion> {
     if (!this.config.get<string>('GROQ_API_KEY')) {
       // Fail fast with a 503-mapped error rather than a confusing 401 from Groq.
       throw new AiProviderError(503, 'GROQ_API_KEY is not configured');
@@ -77,7 +83,19 @@ export class GroqProvider implements AiChatProvider {
       if (!content) {
         throw new AiProviderError(502, 'Groq returned an empty response');
       }
-      return content;
+
+      // Surface token usage so AiBudgetService can meter per-user spend. Groq is
+      // OpenAI-wire-compatible and returns `usage`; default to 0 if it is ever
+      // absent so metering degrades to request-counting rather than crashing.
+      const usage = completion.usage;
+      return {
+        content,
+        usage: {
+          promptTokens: usage?.prompt_tokens ?? 0,
+          completionTokens: usage?.completion_tokens ?? 0,
+          totalTokens: usage?.total_tokens ?? 0,
+        },
+      };
     } catch (err) {
       if (err instanceof AiProviderError) throw err;
 

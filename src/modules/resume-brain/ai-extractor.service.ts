@@ -11,6 +11,7 @@ import {
   AI_CHAT_PROVIDER,
   AiChatProvider,
   AiProviderError,
+  AiUsage,
 } from './ai/ai-chat-provider.interface';
 import {
   EMPTY_EXTRACTED_RESUME,
@@ -18,6 +19,16 @@ import {
   ExtractedExperience,
   ExtractedResume,
 } from './dto/extracted-resume.dto';
+
+/**
+ * Result of a single extraction: the structured resume plus the token usage the
+ * provider reported. The usage rides back to {@link ResumeBrainService} so it
+ * can meter per-user AI spend without the extractor knowing about budgeting.
+ */
+export interface ExtractionResult {
+  resume: ExtractedResume;
+  usage: AiUsage;
+}
 
 /**
  * AIExtractorService
@@ -50,7 +61,7 @@ export class AIExtractorService {
    * @throws HttpException(429) when the provider is rate-limited.
    * @throws UnprocessableEntityException when the reply is not usable JSON.
    */
-  async extract(text: string): Promise<ExtractedResume> {
+  async extract(text: string): Promise<ExtractionResult> {
     const trimmed = (text ?? '').trim();
     if (!trimmed) {
       throw new UnprocessableEntityException(
@@ -58,18 +69,25 @@ export class AIExtractorService {
       );
     }
 
-    // Cap the prompt size — resumes are short, and this bounds token cost.
-    const resumeText = trimmed.slice(0, 12_000);
+    // Cap the prompt size — resumes are short, and this bounds token cost —
+    // then neutralise the most common prompt-injection payloads. The low
+    // temperature (0.1) and strict "return ONLY JSON" schema already resist
+    // hijacking; stripping these phrases is defence in depth against a resume
+    // whose text tries to override our instructions.
+    const resumeText = this.sanitize(trimmed.slice(0, 12_000));
 
     let raw: string;
+    let usage: AiUsage;
     try {
-      raw = await this.provider.complete(
+      const completion = await this.provider.complete(
         [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: this.buildUserPrompt(resumeText) },
         ],
         { json: true, temperature: 0.1, maxTokens: 1500 },
       );
+      raw = completion.content;
+      usage = completion.usage;
     } catch (err) {
       throw this.toHttpException(err);
     }
@@ -83,9 +101,24 @@ export class AIExtractorService {
     this.logger.log(
       `Extracted resume via ${this.provider.name}: ` +
         `${resume.skills.length} skills, ${resume.experience.length} roles, ` +
-        `${resume.education.length} education entries.`,
+        `${resume.education.length} education entries ` +
+        `(${usage.totalTokens} tokens).`,
     );
-    return resume;
+    return { resume, usage };
+  }
+
+  /**
+   * Strip the best-known prompt-injection markers from untrusted resume text so
+   * a crafted document cannot steer the extractor. Case-insensitive; collapses
+   * the phrase to a space rather than deleting so surrounding words stay legible.
+   */
+  private sanitize(text: string): string {
+    return text
+      .replace(/ignore\s+(all\s+)?previous\s+instructions/gi, ' ')
+      .replace(/disregard\s+(all\s+)?(previous|prior)\s+instructions/gi, ' ')
+      .replace(/^\s*system\s*:/gim, ' ')
+      .replace(/^\s*assistant\s*:/gim, ' ')
+      .trim();
   }
 
   // ── Prompt ────────────────────────────────────────────────────────────────

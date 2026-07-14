@@ -11,6 +11,7 @@ import {
 } from './resume-brain.constants';
 import { DocumentParserService } from './document-parser.service';
 import { AIExtractorService } from './ai-extractor.service';
+import { AiBudgetService } from './ai-budget.service';
 import { ResumeValidatorService } from './resume-validator.service';
 import {
   ProfileMapperService,
@@ -70,6 +71,7 @@ export class ResumeBrainService {
   constructor(
     private readonly documentParser: DocumentParserService,
     private readonly aiExtractor: AIExtractorService,
+    private readonly aiBudget: AiBudgetService,
     private readonly resumeValidator: ResumeValidatorService,
     private readonly profileMapper: ProfileMapperService,
   ) {}
@@ -130,9 +132,18 @@ export class ResumeBrainService {
    * a `400`. The returned `profile` is a validated {@link ExtractedResume},
    * ready for the frontend autofill and (via the Phase 6 mapper) UserService.
    */
-  async extractProfile(file?: UploadedResumeFile): Promise<ExtractedResumeResult> {
+  async extractProfile(
+    file?: UploadedResumeFile,
+    userId?: string,
+  ): Promise<ExtractedResumeResult> {
     const { text, ...metadata } = await this.parseResume(file);
-    const extracted = await this.aiExtractor.extract(text);
+
+    // Cost guard: reject (429) before spending on the paid provider if the user
+    // is over their daily budget, then meter the tokens the call actually used.
+    await this.aiBudget.assertWithinBudget(userId);
+    const { resume: extracted, usage } = await this.aiExtractor.extract(text);
+    await this.aiBudget.recordUsage(userId, usage);
+
     const profile = this.resumeValidator.validate(extracted);
     const userProfile = this.profileMapper.toUserProfile(profile);
     return {
@@ -157,6 +168,36 @@ export class ResumeBrainService {
       throw new UnsupportedMediaTypeException(
         `Unsupported file type "${file.mimetype || ext || 'unknown'}". ` +
           'Only PDF, DOC, and DOCX resumes are allowed.',
+      );
+    }
+
+    this.assertMagicNumber(file, ext);
+  }
+
+  /**
+   * Defence in depth: verify the file's leading bytes match its declared type.
+   * MIME/extension can be spoofed; the magic number cannot. Rejecting a mismatch
+   * here fails fast with a clear `415` instead of a confusing `422` deep inside
+   * the parser. `.doc` is legacy binary with several valid signatures, so we
+   * only assert the modern, well-defined `.pdf`/`.docx` headers.
+   */
+  private assertMagicNumber(file: UploadedResumeFile, ext: string): void {
+    const buffer = file.buffer;
+    if (!buffer || buffer.length < 4) return;
+
+    if (
+      ext === '.pdf' &&
+      buffer.toString('ascii', 0, 4) !== '%PDF'
+    ) {
+      throw new UnsupportedMediaTypeException(
+        'File content does not match the PDF format.',
+      );
+    }
+
+    // .docx is a ZIP container — every one starts with the "PK" local-file header.
+    if (ext === '.docx' && buffer.toString('ascii', 0, 2) !== 'PK') {
+      throw new UnsupportedMediaTypeException(
+        'File content does not match the DOCX format.',
       );
     }
   }

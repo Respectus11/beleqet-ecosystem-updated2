@@ -7,6 +7,7 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -15,6 +16,10 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../../common/decorators/current-user.decorator';
 import { ResumeBrainService, UploadedResumeFile } from './resume-brain.service';
 import { MAX_FILE_SIZE_BYTES } from './resume-brain.constants';
 
@@ -29,8 +34,15 @@ export class ResumeBrainController {
     return this.resumeBrainService.health();
   }
 
+  // NOTE: `ThrottlerGuard` is applied explicitly here. The app configures
+  // `ThrottlerModule.forRoot` but never binds the guard globally (no APP_GUARD),
+  // so a bare `@Throttle` decorator would be inert. Listing it in `@UseGuards`
+  // alongside `JwtAuthGuard` makes the per-endpoint limits below actually
+  // enforce for this module.
+
   @Post('upload')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } }) // 10 uploads / minute
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Upload a resume (PDF/DOC/DOCX, max 5MB) and echo back its metadata',
@@ -51,7 +63,8 @@ export class ResumeBrainController {
   }
 
   @Post('parse')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } }) // 10 parses / minute
   @ApiBearerAuth()
   @ApiOperation({
     summary:
@@ -72,7 +85,11 @@ export class ResumeBrainController {
   }
 
   @Post('extract')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  // Tighter than upload/parse: this is the only endpoint that calls the paid AI
+  // provider. The burst cap here plus the per-user daily budget in the service
+  // (AiBudgetService) together bound both abuse rate and cumulative cost.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } }) // 5 AI extractions / minute
   @ApiBearerAuth()
   @ApiOperation({
     summary:
@@ -89,7 +106,10 @@ export class ResumeBrainController {
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE_BYTES } }),
   )
-  extract(@UploadedFile() file: UploadedResumeFile) {
-    return this.resumeBrainService.extractProfile(file);
+  extract(
+    @UploadedFile() file: UploadedResumeFile,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.resumeBrainService.extractProfile(file, user?.userId);
   }
 }
