@@ -47,113 +47,123 @@ export class SalaryProcessor {
         `[Job: update-predictions] Found ${stalePredictions.length} stale predictions`,
       );
 
-      // Archive to history BEFORE updating/recomputing
-      for (const prediction of stalePredictions) {
-        await this.prismaService.salaryHistory.create({
-          data: {
-            jobTitle: prediction.jobTitle,
-            jobCategoryId: prediction.jobCategoryId,
-            industry: prediction.industry,
-            location: prediction.location,
-            experienceLevel: prediction.experienceLevel,
-            currency: prediction.currency,
-            minSalary: prediction.minSalary,
-            maxSalary: prediction.maxSalary,
-            averageSalary: prediction.averageSalary,
-            medianSalary: prediction.medianSalary,
-            dataPointsCount: prediction.dataPointsCount,
-            version: prediction.version,
-            isAnonymized: true,
-          },
+      // Archive to history BEFORE updating/recomputing in a transaction
+      // to avoid race conditions and ensure data consistency.
+      const BATCH_SIZE = 20;
+      for (let i = 0; i < stalePredictions.length; i += BATCH_SIZE) {
+        const batch = stalePredictions.slice(i, i + BATCH_SIZE);
+        await this.prismaService.$transaction(async (tx) => {
+          for (const prediction of batch) {
+            await tx.salaryHistory.create({
+              data: {
+                jobTitle: prediction.jobTitle,
+                jobCategoryId: prediction.jobCategoryId,
+                industry: prediction.industry,
+                location: prediction.location,
+                experienceLevel: prediction.experienceLevel,
+                currency: prediction.currency,
+                minSalary: prediction.minSalary,
+                maxSalary: prediction.maxSalary,
+                averageSalary: prediction.averageSalary,
+                medianSalary: prediction.medianSalary,
+                dataPointsCount: prediction.dataPointsCount,
+                version: prediction.version,
+                isAnonymized: true,
+              },
+            });
+          }
         });
       }
 
       // Recompute market values so predictions do NOT stagnate.
       // This mirrors SalaryService.calculatePredictionFromJobData() logic.
       const now = new Date();
-      for (const prediction of stalePredictions) {
-        const jobTitleLower = prediction.jobTitle.toLowerCase();
+      for (let i = 0; i < stalePredictions.length; i += BATCH_SIZE) {
+        const batch = stalePredictions.slice(i, i + BATCH_SIZE);
+        await this.prismaService.$transaction(async (tx) => {
+          for (const prediction of batch) {
+            const jobTitleLower = prediction.jobTitle.toLowerCase();
 
-        const baseSalaryMap: Record<string, number> = {
-          developer: 100000,
-          designer: 80000,
-          manager: 120000,
-          analyst: 90000,
-          engineer: 110000,
-          consultant: 130000,
-          intern: 40000,
-          junior: 60000,
-        };
+            const baseSalaryMap: Record<string, number> = {
+              developer: 100000,
+              designer: 80000,
+              manager: 120000,
+              analyst: 90000,
+              engineer: 110000,
+              consultant: 130000,
+              intern: 40000,
+              junior: 60000,
+            };
 
-        let baseSalary = 80000;
-        for (const [key, salary] of Object.entries(baseSalaryMap)) {
-          if (jobTitleLower.includes(key)) {
-            baseSalary = salary;
-            break;
+            let baseSalary = 80000;
+            for (const [key, salary] of Object.entries(baseSalaryMap)) {
+              if (jobTitleLower.includes(key)) {
+                baseSalary = salary;
+                break;
+              }
+            }
+
+            const locationMultipliers: Record<string, number> = {
+              'Addis Ababa': 1.3,
+              'Dire Dawa': 1.0,
+              Hawassa: 0.9,
+              Mekelle: 0.85,
+              Adama: 0.95,
+              'Bahir Dar': 0.9,
+            };
+
+            const industryMultipliers: Record<string, number> = {
+              Technology: 1.5,
+              Finance: 1.4,
+              Healthcare: 1.2,
+              Education: 0.9,
+              Retail: 0.7,
+              Manufacturing: 0.95,
+              Telecommunications: 1.3,
+              Consulting: 1.35,
+            };
+
+            const experienceLevelMultipliers: Record<string, number> = {
+              JUNIOR: 0.7,
+              MID: 1.0,
+              SENIOR: 1.4,
+              LEAD: 1.8,
+              PRINCIPAL: 2.2,
+            };
+
+            const locationMultiplier = locationMultipliers[prediction.location] || 1.0;
+            const industryMultiplier = industryMultipliers[prediction.industry || 'Technology'] || 1.0;
+            const experienceMultiplier =
+              experienceLevelMultipliers[prediction.experienceLevel || 'MID'] || 1.0;
+
+            const adjustedSalary =
+              baseSalary * locationMultiplier * industryMultiplier * experienceMultiplier;
+
+            const variance = adjustedSalary * 0.25;
+            const minSalary = Math.round(adjustedSalary - variance);
+            const maxSalary = Math.round(adjustedSalary + variance);
+            const averageSalary = Math.round(adjustedSalary);
+            const medianSalary = Math.round(adjustedSalary);
+
+            const dataPointsCount = Math.min(100, Math.floor(Math.random() * 80) + 20);
+            const confidenceScore = Math.min(0.95, 0.5 + dataPointsCount / 300);
+            const standardDeviation = Math.round(variance * 0.5);
+
+            await tx.salaryPrediction.update({
+              where: { id: prediction.id },
+              data: {
+                minSalary,
+                maxSalary,
+                averageSalary,
+                medianSalary,
+                dataPointsCount,
+                standardDeviation,
+                confidenceScore,
+                version: { increment: 1 },
+                lastUpdatedAt: now,
+              },
+            });
           }
-        }
-
-        const locationMultipliers: Record<string, number> = {
-          'Addis Ababa': 1.3,
-          'Dire Dawa': 1.0,
-          Hawassa: 0.9,
-          Mekelle: 0.85,
-          Adama: 0.95,
-          'Bahir Dar': 0.9,
-        };
-
-        const industryMultipliers: Record<string, number> = {
-          Technology: 1.5,
-          Finance: 1.4,
-          Healthcare: 1.2,
-          Education: 0.9,
-          Retail: 0.7,
-          Manufacturing: 0.95,
-          Telecommunications: 1.3,
-          Consulting: 1.35,
-        };
-
-        const experienceLevelMultipliers: Record<string, number> = {
-          JUNIOR: 0.7,
-          MID: 1.0,
-          SENIOR: 1.4,
-          LEAD: 1.8,
-          PRINCIPAL: 2.2,
-        };
-
-        const locationMultiplier = locationMultipliers[prediction.location] || 1.0;
-        const industryMultiplier = industryMultipliers[prediction.industry || 'Technology'] || 1.0;
-        const experienceMultiplier =
-          experienceLevelMultipliers[prediction.experienceLevel || 'MID'] || 1.0;
-
-        const adjustedSalary =
-          baseSalary * locationMultiplier * industryMultiplier * experienceMultiplier;
-
-        const variance = adjustedSalary * 0.25;
-        const minSalary = Math.round(adjustedSalary - variance);
-        const maxSalary = Math.round(adjustedSalary + variance);
-        const averageSalary = Math.round(adjustedSalary);
-        const medianSalary = Math.round(adjustedSalary);
-
-        const dataPointsCount = Math.min(100, Math.floor(Math.random() * 80) + 20);
-        const confidenceScore = Math.min(0.95, 0.5 + dataPointsCount / 300);
-        const standardDeviation = Math.round(variance * 0.5);
-
-        await this.prismaService.salaryPrediction.update({
-          where: { id: prediction.id },
-          data: {
-            minSalary,
-            maxSalary,
-            averageSalary,
-            medianSalary,
-            dataPointsCount,
-            standardDeviation,
-            confidenceScore,
-            version: {
-              increment: 1,
-            },
-            lastUpdatedAt: now,
-          },
         });
       }
 
@@ -178,72 +188,75 @@ export class SalaryProcessor {
     this.logger.log('[Job: compute-analytics] Starting salary analytics computation...');
 
     try {
-      // Get unique locations and industries
-      const locations = await this.prismaService.salaryPrediction.findMany({
-        distinct: ['location'],
-        select: { location: true },
+      // Get unique location + industry combinations in a single query
+      // to avoid N+1 queries when iterating locations and industries.
+      const groups = await this.prismaService.salaryPrediction.groupBy({
+        by: ['location', 'industry'],
         where: { isAnonymized: true },
       });
 
-      this.logger.log(`[Job: compute-analytics] Found ${locations.length} unique locations`);
+      this.logger.log(`[Job: compute-analytics] Found ${groups.length} location-industry groups`);
 
-      const totalTasks = locations.length;
+      const totalTasks = groups.length;
       let completedTasks = 0;
 
-      for (const loc of locations) {
-        const industries = await this.prismaService.salaryPrediction.findMany({
-          distinct: ['industry'],
-          select: { industry: true },
-          where: { location: loc.location },
+      for (const group of groups) {
+        const predictions = await this.prismaService.salaryPrediction.findMany({
+          where: {
+            location: group.location,
+            industry: group.industry,
+          },
         });
 
-        for (const ind of industries) {
-          // Calculate aggregate statistics
-          const predictions = await this.prismaService.salaryPrediction.findMany({
-            where: {
-              location: loc.location,
-              industry: ind.industry,
-            },
-          });
+        if (predictions.length === 0) continue;
 
-          if (predictions.length === 0) continue;
+        const totalDataPoints = predictions.reduce((sum, p) => sum + (p.dataPointsCount || 1), 0);
+        const averageSalary = Math.round(
+          predictions.reduce((sum, p) => sum + p.averageSalary * (p.dataPointsCount || 1), 0) /
+            totalDataPoints,
+        );
 
-          const salaries = predictions.map((p) => p.averageSalary).sort((a, b) => a - b);
-          const averageSalary = Math.round(
-            salaries.reduce((sum, s) => sum + s, 0) / salaries.length,
-          );
-          const medianSalary = salaries[Math.floor(salaries.length / 2)];
-          const topJobTitles = this.getTopJobTitles(predictions, 5);
-
-          // Compute growth rate
-          const growthRate = await this.computeGrowthRate(loc.location, ind.industry);
-
-          // Store or update analytics
-          await this.prismaService.salaryAnalytics.upsert({
-            where: {
-              id: `${loc.location}-${ind.industry}-analytics`,
-            },
-            create: {
-              id: `${loc.location}-${ind.industry}-analytics`,
-              location: loc.location,
-              industry: ind.industry,
-              averageSalary,
-              medianSalary,
-              salaryGrowthRate: growthRate,
-              topJobTitles,
-              periodStartDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-              periodEndDate: new Date(),
-              computedAt: new Date(),
-            },
-            update: {
-              averageSalary,
-              medianSalary,
-              salaryGrowthRate: growthRate,
-              topJobTitles,
-              computedAt: new Date(),
-            },
-          });
+        const sortedBySalary = [...predictions].sort((a, b) => a.averageSalary - b.averageSalary);
+        let cumulativeWeight = 0;
+        let medianSalary = sortedBySalary[0]?.averageSalary || 0;
+        for (const p of sortedBySalary) {
+          cumulativeWeight += p.dataPointsCount || 1;
+          if (cumulativeWeight >= totalDataPoints / 2) {
+            medianSalary = p.averageSalary;
+            break;
+          }
         }
+
+        const topJobTitles = this.getTopJobTitles(predictions, 5);
+
+        // Compute growth rate
+        const growthRate = await this.computeGrowthRate(group.location, group.industry);
+
+        // Store or update analytics
+        await this.prismaService.salaryAnalytics.upsert({
+          where: {
+            id: `${group.location}-${group.industry}-analytics`,
+          },
+          create: {
+            id: `${group.location}-${group.industry}-analytics`,
+            location: group.location,
+            industry: group.industry,
+            averageSalary,
+            medianSalary,
+            salaryGrowthRate: growthRate,
+            topJobTitles,
+            periodStartDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            periodEndDate: new Date(),
+            computedAt: new Date(),
+          },
+          update: {
+            averageSalary,
+            medianSalary,
+            salaryGrowthRate: growthRate,
+            topJobTitles,
+            computedAt: new Date(),
+          },
+        });
 
         completedTasks++;
         job.progress((completedTasks / totalTasks) * 100);
@@ -284,34 +297,39 @@ export class SalaryProcessor {
         `[Job: archive-old-data] Found ${oldPredictions.length} predictions to archive`,
       );
 
-      for (const prediction of oldPredictions) {
-        await this.prismaService.salaryHistory.create({
-          data: {
-            jobTitle: prediction.jobTitle,
-            jobCategoryId: prediction.jobCategoryId,
-            industry: prediction.industry,
-            location: prediction.location,
-            experienceLevel: prediction.experienceLevel,
-            currency: prediction.currency,
-            minSalary: prediction.minSalary,
-            maxSalary: prediction.maxSalary,
-            averageSalary: prediction.averageSalary,
-            medianSalary: prediction.medianSalary,
-            dataPointsCount: prediction.dataPointsCount,
-            version: prediction.version,
-            isAnonymized: true,
-          },
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < oldPredictions.length; i += BATCH_SIZE) {
+        const batch = oldPredictions.slice(i, i + BATCH_SIZE);
+        await this.prismaService.$transaction(async (tx) => {
+          for (const prediction of batch) {
+            await tx.salaryHistory.create({
+              data: {
+                jobTitle: prediction.jobTitle,
+                jobCategoryId: prediction.jobCategoryId,
+                industry: prediction.industry,
+                location: prediction.location,
+                experienceLevel: prediction.experienceLevel,
+                currency: prediction.currency,
+                minSalary: prediction.minSalary,
+                maxSalary: prediction.maxSalary,
+                averageSalary: prediction.averageSalary,
+                medianSalary: prediction.medianSalary,
+                dataPointsCount: prediction.dataPointsCount,
+                version: prediction.version,
+                isAnonymized: true,
+              },
+            });
+          }
+
+          await tx.salaryPrediction.deleteMany({
+            where: {
+              id: {
+                in: batch.map((p) => p.id),
+              },
+            },
+          });
         });
       }
-
-      // Delete archived predictions
-      await this.prismaService.salaryPrediction.deleteMany({
-        where: {
-          id: {
-            in: oldPredictions.map((p) => p.id),
-          },
-        },
-      });
 
       this.logger.log(
         `[Job: archive-old-data] Archived and deleted ${oldPredictions.length} predictions`,

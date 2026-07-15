@@ -536,11 +536,26 @@ export class SalaryService {
    * Calculate aggregate statistics from multiple predictions
    */
   private calculateAggregateStatistics(predictions: any[]): { avg: number; median: number } {
-    const salaries = predictions.map((p) => p.averageSalary).sort((a, b) => a - b);
-    const avg = salaries.reduce((sum, s) => sum + s, 0) / salaries.length;
-    const median = salaries[Math.floor(salaries.length / 2)];
+    if (predictions.length === 0) {
+      return { avg: 0, median: 0 };
+    }
 
-    return { avg, median };
+    const totalWeight = predictions.reduce((sum, p) => sum + (p.dataPointsCount || 1), 0);
+    const avg =
+      predictions.reduce((sum, p) => sum + p.averageSalary * (p.dataPointsCount || 1), 0) / totalWeight;
+
+    const sortedBySalary = [...predictions].sort((a, b) => a.averageSalary - b.averageSalary);
+    let cumulativeWeight = 0;
+    let median = sortedBySalary[0]?.averageSalary || 0;
+    for (const p of sortedBySalary) {
+      cumulativeWeight += p.dataPointsCount || 1;
+      if (cumulativeWeight >= totalWeight / 2) {
+        median = p.averageSalary;
+        break;
+      }
+    }
+
+    return { avg: Math.round(avg), median };
   }
 
   /**
