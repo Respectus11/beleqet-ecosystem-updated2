@@ -56,9 +56,10 @@ const CATEGORY_AFFINITY_WEIGHT = 30;
  * `OR` array — every one of which forces Postgres into a sequential scan
  * (leading-wildcard ILIKE can't use a standard b-tree index). Capping bounds
  * the query to a fixed, predictable cost regardless of how active a user is.
- * We keep the most recent/most specific keywords by taking the tail of the
- * (already deduplicated) extracted list, since `extractKeywords` preserves
- * input order and search terms are appended before skills.
+ * We keep the *head* of the (already deduplicated) extracted list, since
+ * `extractKeywords` preserves input order and search terms are placed before
+ * skills — recent search intent should win over static declared skills when
+ * something has to be dropped.
  */
 const MAX_KEYWORDS = 12;
 
@@ -128,7 +129,9 @@ export class AiFeedService {
     }
 
     // Bound keyword volume before it ever reaches a query — see MAX_KEYWORDS.
-    const boundedKeywords = keywords.slice(-MAX_KEYWORDS);
+    // Slice from the front: search terms come first in `keywords`, so this
+    // keeps recent search intent over static declared skills when truncating.
+    const boundedKeywords = keywords.slice(0, MAX_KEYWORDS);
 
     const jobs = await this.fetchCandidatePool(boundedKeywords, savedCategoryIds);
 
@@ -304,11 +307,26 @@ export class AiFeedService {
 
   /**
    * Normalizes a list of free-text terms (search queries and/or skills)
-   * into a de-duplicated, lower-cased keyword set with stop-words and
-   * very short tokens removed.
+   * into a de-duplicated keyword set with stop-words and very short tokens
+   * removed.
+   *
+   * IMPORTANT: this must split text the *same way* `tokenize()` does. An
+   * earlier version split only on whitespace here, which let punctuation
+   * survive (e.g. "Node.js" -> one token "node.js"), while `tokenize()`
+   * splits on any non-alphanumeric character when scoring job text (e.g.
+   * "Node.js" in a job description -> two tokens "node", "js"). That
+   * mismatch meant `tokens.has(keyword)` could never be true for any
+   * keyword containing punctuation — the job would be fetched as a DB
+   * candidate but always score 0. Sharing `tokenize()` here guarantees the
+   * two sides can never drift apart again.
+   *
+   * Trade-off: this does mean short fragments like "js" (from "Node.js")
+   * or "c" (from "C#") fall below the length-3 floor and are dropped as
+   * keywords. That's an intentional, existing filter (see `STOP_WORDS`/the
+   * length check below) — it wasn't relaxed here.
    */
   private extractKeywords(terms: string[]): string[] {
-    const words = terms.join(' ').toLowerCase().split(/\s+/);
-    return [...new Set(words)].filter((word) => word.length > 2 && !STOP_WORDS.has(word));
+    const words = this.tokenize(terms.join(' '));
+    return [...words].filter((word) => word.length > 2 && !STOP_WORDS.has(word));
   }
 }

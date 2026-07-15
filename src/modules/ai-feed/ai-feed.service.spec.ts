@@ -205,5 +205,51 @@ describe('AiFeedService', () => {
         }),
       );
     });
+
+    it('matches a keyword containing punctuation against job text (e.g. "Node.js")', async () => {
+      // extractKeywords and tokenize must split text identically, or a
+      // keyword like "Node.js" (kept whole by a whitespace-only split) can
+      // never be found among job tokens (split into "node"/"js" by a
+      // non-alphanumeric split) -> the job is fetched as a candidate but
+      // always scores 0.
+      mockPrismaService.searchHistory.findMany.mockResolvedValue([{ searchTerm: 'Node.js' }]);
+      mockPrismaService.job.findMany.mockResolvedValue([
+        {
+          ...mockJobs[0],
+          id: '4',
+          title: 'Node.js Developer',
+          description: 'Build APIs with Node.js',
+          tags: [],
+        },
+      ]);
+
+      const result = await service.getPersonalizedFeed('user-1', 5);
+
+      expect(result[0].relevanceScore).toBeGreaterThan(0);
+    });
+
+    it('prioritizes recent search terms over static skills when truncating to MAX_KEYWORDS', async () => {
+      const searchWords = [
+        'alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot',
+        'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima',
+      ];
+      mockPrismaService.searchHistory.findMany.mockResolvedValue(
+        searchWords.map((word) => ({ searchTerm: word })),
+      );
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        gdprConsent: true,
+        skills: ['zuluskill'],
+      });
+
+      await service.getPersonalizedFeed('user-1', 5);
+
+      const [[callArgs]] = (prisma.job.findMany as jest.Mock).mock.calls;
+      const titleKeywords = callArgs.where.OR
+        .filter((clause: { title?: { contains: string } }) => clause.title)
+        .map((clause: { title: { contains: string } }) => clause.title.contains);
+
+      expect(titleKeywords).toEqual(expect.arrayContaining(searchWords));
+      expect(titleKeywords).not.toEqual(expect.arrayContaining(['zuluskill']));
+    });
   });
 });
