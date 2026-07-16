@@ -33,6 +33,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 // ── Fixed: PerformanceWorkerModule import statement deleted ──
 import { TwoFactorModule } from './modules/two-factor/two-factor.module';
 import { KycModule } from './modules/kyc/kyc.module';
+import { ResumeBrainModule } from './modules/resume-brain/resume-brain.module';
 
 @Module({
   imports: [
@@ -116,6 +117,7 @@ import { KycModule } from './modules/kyc/kyc.module';
     // ── Fixed: PerformanceWorkerModule removed from imports array ──
     TwoFactorModule,
     KycModule,
+    ResumeBrainModule,
   ],
   providers: [
     {

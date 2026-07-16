@@ -6,6 +6,8 @@
     "frontend",
     "beleqet-jobs-nextjs",
     "**/*spec.ts",
-    "test"
+    "test",
+    "prisma",
+    "scripts"
   ]
 }
