@@ -24,11 +24,14 @@ import { ChatModule } from './modules/chat/chat.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { ContactModule } from './modules/contact/contact.module';
+
+import { InterviewPlannerModule } from '@modules/interview-planner/interview-planner.module';
+import { DbIndexMasterModule } from './modules/db-index-master/db-index-master.module';
 import { APP_GUARD } from '@nestjs/core';
 import { AnomalySensorModule } from './modules/anomaly-sensor/anomaly-sensor.module';
 import { AdminStatsModule } from './modules/admin-stats/admin-stats.module';
 import { DisputeManagerModule } from './modules/dispute-manager/dispute-manager.module';
-import { DbIndexMasterModule } from './modules/db-index-master/db-index-master.module';
+
 import { PaymentsModule } from './modules/payments/payments.module';
 // ── Fixed: PerformanceWorkerModule import statement deleted ──
 import { TwoFactorModule } from './modules/two-factor/two-factor.module';
@@ -110,6 +113,7 @@ import { ResumeBrainModule } from './modules/resume-brain/resume-brain.module';
     UploadsModule,
     TelegramModule,
     ContactModule,
+    InterviewPlannerModule,
     AnomalySensorModule,
     AdminStatsModule,
     DisputeManagerModule,
