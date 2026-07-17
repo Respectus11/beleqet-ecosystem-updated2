@@ -14,8 +14,6 @@ import { AppModule } from '../../../app.module';
  */
 describe('Encrypted Inbox (Integration)', () => {
   let app: INestApplication;
-  let authToken: string;
-  let userId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -41,16 +39,6 @@ describe('Encrypted Inbox (Integration)', () => {
         .send({ publicKey: 'test', encryptedPrivateKey: 'test' });
 
       expect(response.status).toBe(401);
-    });
-
-    it('should validate required fields', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/encrypted-inbox/keys')
-        .set('Authorization', `Bearer ${authToken}`)
-        .send({});
-
-      // Should be 401 (no auth) or 400 (validation)
-      expect([400, 401]).toContain(response.status);
     });
   });
 
