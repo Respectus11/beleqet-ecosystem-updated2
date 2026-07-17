@@ -30,7 +30,7 @@ export class UsersResolver {
    * @param id - User UUID
    */
   @Query(() => GqlUser, { name: 'gqlUser', description: 'Fetch a user by ID', nullable: true })
-  async getUser(@Args('id') id: string): Promise<GqlUser | null> {
+  async getUser(@Args('id') id: string) {
     return this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -66,7 +66,7 @@ export class UsersResolver {
   async getUsers(
     @Args('role', { type: () => String, nullable: true }) role?: string,
     @Args('limit', { type: () => Int, nullable: true }) limit?: number,
-  ): Promise<GqlUser[]> {
+  ) {
     const where: Record<string, unknown> = {};
     if (role) where.role = role;
 
