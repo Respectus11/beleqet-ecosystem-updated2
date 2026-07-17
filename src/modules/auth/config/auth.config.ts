@@ -14,7 +14,7 @@ const REQUIRED_KEY_LENGTH_BYTES = 32;
  */
 export const TOKEN_ENCRYPTION_KEY = Symbol('TOKEN_ENCRYPTION_KEY');
 export const AUTH_ENV_CONFIG = Symbol('AUTH_ENV_CONFIG');
-
+console.log(process.env.OAUTH_TOKEN_ENCRYPTION_KEY);
 /**
  * Strongly-typed shape of the environment configuration this module reads.
  * Every value originates from `process.env` — nothing here is ever
