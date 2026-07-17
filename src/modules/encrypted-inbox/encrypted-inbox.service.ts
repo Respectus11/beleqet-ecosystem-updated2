@@ -198,7 +198,8 @@ export class EncryptedInboxService {
         senderId,
         ciphertext: dto.ciphertext,
         iv: dto.iv,
-        encryptedMetadata: dto.encryptedMetadata || undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        encryptedMetadata: dto.encryptedMetadata ? (dto.encryptedMetadata as any) : undefined,
         serverCiphertext,
         serverEncryptionVersion,
       },
