@@ -46,7 +46,7 @@ export class ApplicationsResolver {
   })
   async getApplications(
     @Args('filter', { nullable: true }) filter?: GqlApplicationFilterInput,
-  ): Promise<GqlApplicationConnection> {
+  ) {
     const page = filter?.page || 1;
     const limit = Math.min(filter?.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -82,7 +82,7 @@ export class ApplicationsResolver {
     description: 'Fetch a single application by ID',
     nullable: true,
   })
-  async getApplication(@Args('id') id: string): Promise<GqlApplication | null> {
+  async getApplication(@Args('id') id: string) {
     return this.prisma.application.findUnique({ where: { id } });
   }
 
@@ -95,7 +95,7 @@ export class ApplicationsResolver {
   })
   async getApplicationsByJob(
     @Args('jobId') jobId: string,
-  ): Promise<GqlApplication[]> {
+  ) {
     return this.prisma.application.findMany({
       where: { jobId },
       orderBy: { createdAt: 'desc' },
