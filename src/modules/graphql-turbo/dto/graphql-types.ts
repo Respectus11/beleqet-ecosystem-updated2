@@ -1,5 +1,4 @@
 import { ObjectType, Field, ID, Float, Int, registerEnumType, InputType } from '@nestjs/graphql';
-import GraphQLJSON from 'graphql-type-json';
 
 // ── Enums ────────────────────────────────────────────────────────────────
 
