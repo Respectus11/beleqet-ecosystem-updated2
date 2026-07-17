@@ -22,5 +22,9 @@
   "uploads": {
     "presignedUrlCreated": "Upload URL created successfully.",
     "assetUploaded": "Asset uploaded successfully."
+  },
+  "tax": {
+    "unsupportedJurisdiction": "Unsupported tax jurisdiction \"{countryCode}\". Supported: ET, US.",
+    "calculationFailed": "Tax calculation failed. Please try again."
   }
 }
