@@ -413,11 +413,25 @@ export class EncryptedInboxService {
     });
 
     // Decrypt server-side ciphertext copies where available
-    const exportData = conversations.map((conv) => ({
+    type ConversationWithMessages = {
+      id: string;
+      status: string;
+      createdAt: Date;
+      messages: Array<{
+        id: string;
+        senderId: string;
+        createdAt: Date;
+        ciphertext: string;
+        serverCiphertext: string | null;
+        isDeleted: boolean;
+      }>;
+    };
+
+    const exportData = conversations.map((conv: ConversationWithMessages) => ({
       conversationId: conv.id,
       status: conv.status,
       createdAt: conv.createdAt,
-      messages: conv.messages.map((msg) => {
+      messages: conv.messages.map((msg: ConversationWithMessages['messages'][number]) => {
         let decryptedServerCopy: string | null = null;
         if (msg.serverCiphertext) {
           try {
@@ -447,7 +461,7 @@ export class EncryptedInboxService {
         entityType: 'User',
         payload: {
           conversationCount: conversations.length,
-          totalMessages: conversations.reduce((sum, c) => sum + c.messages.length, 0),
+          totalMessages: conversations.reduce((sum: number, c: ConversationWithMessages) => sum + c.messages.length, 0),
           timestamp: new Date().toISOString(),
         },
       },
