@@ -130,14 +130,6 @@ export class PlagiarismService {
 
     for (const inputChunk of inputChunks) {
       for (const sourceChunk of sourceChunks) {
-        const quickJaccard = await this.similarityEngine.compare(
-          inputChunk.text,
-          sourceChunk.text,
-          true,
-        );
-
-        if (quickJaccard.similarity < this.config.earlyExitThreshold) continue;
-
         const result = await this.similarityEngine.compare(
           inputChunk.text,
           sourceChunk.text,
