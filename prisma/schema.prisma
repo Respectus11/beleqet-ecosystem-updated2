@@ -70,6 +70,10 @@ model User {
   /// User side — the AI Feed module reads SearchHistory independently.
   searchHistories       SearchHistory[]
   storedFiles           StoredFile[]
+  e2eKeyPair            E2EKeyPair?
+  encryptedConversationsAsInitiator EncryptedConversation[] @relation("EncryptedConvInitiator")
+  encryptedConversationsAsResponder EncryptedConversation[] @relation("EncryptedConvResponder")
+  encryptedMessages     EncryptedMessage[]
 
   @@map("users")
 }
@@ -927,4 +931,107 @@ model StoredFile {
   uploadedBy                 User?     @relation(fields: [uploadedById], references: [id])
 
   @@map("stored_files")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Encrypted Inbox – E2EE Zero-Knowledge Architecture (Task Vault-Security-001)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// GDPR notes:
+//   - Message content is stored as ciphertext only; the server never holds
+//     plaintext.  Only the recipient's private key (held client-side) can
+//     decrypt the content.
+//   - Server-side AES-256-GCM copy exists solely for GDPR data-export and
+//     account-deletion workflows; it is encrypted with a server-held key
+//     that is rotated quarterly.
+//   - No raw PII is stored alongside the ciphertext — only UUID references
+//     to the users table.
+
+/// Stores each user's asymmetric key pair.  The public key is in plaintext
+/// (safe to share); the private key is AES-256-GCM encrypted at rest using
+/// a server-held key so the server can facilitate GDPR data exports when the
+/// user proves identity.  The actual E2EE decryption happens client-side.
+model E2EKeyPair {
+  id                       String   @id @default(uuid())
+  userId                   String   @unique
+  publicKey                String   // SPKI-encoded public key (plaintext)
+  encryptedPrivateKey      String   // AES-256-GCM ciphertext of the PKCS8 private key
+  encryptionKeyVersion     String   @default("v1")
+  algorithm                String   @default("RSA-OAEP-256")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("e2e_key_pairs")
+}
+
+/// End-to-end encrypted conversation between two users.
+model EncryptedConversation {
+  id               String                  @id @default(uuid())
+  initiatorId      String
+  responderId      String
+  status           EncryptedConversationStatus @default(ACTIVE)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  initiator        User                    @relation("EncryptedConvInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  responder        User                    @relation("EncryptedConvResponder", fields: [responderId], references: [id], onDelete: Cascade)
+  messages         EncryptedMessage[]
+
+  @@unique([initiatorId, responderId])
+  @@index([initiatorId, status])
+  @@index([responderId, status])
+  @@map("encrypted_conversations")
+}
+
+enum EncryptedConversationStatus {
+  ACTIVE
+  ARCHIVED
+  BLOCKED
+}
+
+/// A single end-to-end encrypted message.  The `ciphertext` field contains
+/// the AES-256-GCM encrypted message body; only the recipient's private key
+/// can decrypt it.  The `serverCiphertext` field holds an independent
+/// server-side encryption copy for GDPR export/deletion workflows.
+model EncryptedMessage {
+  id                  String    @id @default(uuid())
+  conversationId      String
+  senderId            String
+  ciphertext          String    // Client-side E2EE ciphertext (AES-256-GCM)
+  iv                  String    // Initialization vector for client-side decryption
+  encryptedMetadata   Json?     // Encrypted message metadata (type, timestamp, etc.)
+  serverCiphertext    String?   // Server-side encryption copy (GDPR export only)
+  serverEncryptionVersion String @default("v1")
+  isSystem            Boolean   @default(false)
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  conversation        EncryptedConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender              User      @relation(fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@map("encrypted_messages")
+}
+
+/// Records GDPR data-export and deletion requests for audit compliance.
+model GdprAuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  action      GdprAction
+  requestedAt DateTime @default(now())
+  completedAt DateTime?
+  metadata    Json?
+
+  @@index([userId, action])
+  @@index([requestedAt])
+  @@map("gdpr_audit_logs")
+}
+
+enum GdprAction {
+  DATA_EXPORT
+  DATA_DELETION
+  CONSENT_UPDATE
 }
