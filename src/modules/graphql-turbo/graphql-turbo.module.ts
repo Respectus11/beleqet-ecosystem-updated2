@@ -43,9 +43,9 @@ import { AnalyticsResolver } from './resolvers/analytics.resolver';
       // Allow both REST and GraphQL to coexist
       path: 'graphql',
       // CORS is handled by the main NestJS CORS config
-      context: ({ req }) => ({ req }),
+      context: (ctx: { req: unknown }) => ({ req: ctx.req }),
       // Enable field suggestions for development
-      includeStacktraceInErrorMessages: process.env.NODE_ENV !== 'production',
+      includeStacktraceInErrorResponses: process.env.NODE_ENV !== 'production',
     }),
   ],
   providers: [JobsResolver, UsersResolver, ApplicationsResolver, AnalyticsResolver],
