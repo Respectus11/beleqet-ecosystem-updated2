@@ -11,8 +11,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { CurrentUser, CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
+import { CurrentUser, CurrentUserPayload } from '@common/decorators/current-user.decorator';
 import { EncryptedInboxService } from './encrypted-inbox.service';
 import { KeyExchangeService } from './key-exchange.service';
 import {
