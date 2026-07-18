@@ -1,6 +1,9 @@
 # =============================================================================
-# Beleqet admin frontend — production image (Next.js 14)
-# Reproducible: installs from the lockfile with `npm ci` in every stage.
+# Beleqet jobs frontend — production image (Next.js 14)
+#
+# This Dockerfile was missing although docker-compose.yml referenced it,
+# which made `docker compose build` fail. Serves on port 3001 (matching the
+# compose port mappings) via the PORT env var that `next start` honors.
 # =============================================================================
 
 # ── Build stage ──────────────────────────────────────────────────────────────
@@ -33,6 +36,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=3001
 
 COPY --from=pruner --chown=node:node /app/package.json /app/package-lock.json ./
 COPY --from=pruner --chown=node:node /app/node_modules ./node_modules
@@ -42,9 +46,9 @@ COPY --from=builder --chown=node:node /app/next.config.js ./next.config.js
 
 USER node
 
-EXPOSE 3000
+EXPOSE 3001
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD wget -qO- http://127.0.0.1:3000/ || exit 1
+  CMD wget -qO- http://127.0.0.1:3001/ || exit 1
 
 CMD ["npm", "run", "start"]
