@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { AuthProvider } from "@/components/AuthProvider";
 import ChatWidget from "@/components/ChatWidget";
+import { Toaster } from "sonner";
 import { WebSiteSchema } from "@/lib/seo/schemas";
 import { getSeoConfig } from "@/lib/seo/config";
 import { homePageMetadata } from "@/lib/seo/generate-metadata";
