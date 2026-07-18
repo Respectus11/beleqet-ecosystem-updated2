@@ -134,4 +134,26 @@ describe('CircuitBreakerService', () => {
       expect(service.getState('svc4')).toBe(CircuitState.CLOSED);
     });
   });
+
+  describe('executionTimeout', () => {
+    it('fails hung actions even when cooldown timeout is large', async () => {
+      await expect(
+        service.execute(
+          'slow',
+          // Never resolves — must not leave timers that keep Jest alive
+          () => new Promise(() => undefined),
+          { failureThreshold: 5, timeout: 60_000, executionTimeout: 50 },
+        ),
+      ).rejects.toThrow(/execution timeout/i);
+    });
+
+    it('does not treat cooldown timeout as an action deadline', async () => {
+      const result = await service.execute(
+        'fast',
+        async () => 'ok',
+        { failureThreshold: 3, timeout: 1, executionTimeout: 5_000 },
+      );
+      expect(result).toBe('ok');
+    });
+  });
 });

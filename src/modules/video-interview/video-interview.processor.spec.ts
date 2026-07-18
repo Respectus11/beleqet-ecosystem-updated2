@@ -42,9 +42,10 @@ const mockConfig = { get: jest.fn((_k: string, fb?: string) => fb ?? 'dummy') };
 
 describe('VideoInterviewProcessor', () => {
   let processor: VideoInterviewProcessor;
+  let moduleRef: TestingModule;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       providers: [
         VideoInterviewProcessor,
         { provide: PrismaService, useValue: mockPrisma },
@@ -56,10 +57,13 @@ describe('VideoInterviewProcessor', () => {
       ],
     }).compile();
 
-    processor = module.get(VideoInterviewProcessor);
+    processor = moduleRef.get(VideoInterviewProcessor);
   });
 
-  afterEach(() => jest.clearAllMocks());
+  afterEach(async () => {
+    jest.clearAllMocks();
+    await moduleRef.close();
+  });
 
   describe('cleanupExpiredInterviews()', () => {
     it('wipes JSONB PII with Prisma.DbNull (not undefined)', async () => {
@@ -148,7 +152,10 @@ describe('VideoInterviewProcessor', () => {
       });
       mockPrisma.videoInterview.updateMany.mockResolvedValue({ count: 1 });
       const remove = jest.fn().mockResolvedValue(undefined);
-      mockQueue.getJob.mockResolvedValueOnce({ remove });
+      mockQueue.getJob.mockResolvedValueOnce({
+        remove,
+        getState: jest.fn().mockResolvedValue('completed'),
+      });
       mockQueue.add.mockResolvedValue({ id: 'job-2' });
 
       await processor.processTranscription({
@@ -161,6 +168,41 @@ describe('VideoInterviewProcessor', () => {
         { sessionId: 'sess-3', lang: 'en' },
         expect.objectContaining({ jobId: 'evaluate-sess-3' }),
       );
+    });
+
+    it('does not remove an active EVALUATE job (avoids BullMQ crash)', async () => {
+      mockPrisma.videoResponse.findUnique.mockResolvedValue({
+        id: 'resp-4',
+        videoUrl: 'https://cdn.example/v.webm',
+        language: 'en',
+      });
+      mockPrisma.videoResponse.update.mockResolvedValue({});
+      mockCircuitBreaker.execute.mockResolvedValueOnce({
+        text: 'hello',
+        segments: [],
+        language: 'en',
+        duration: 1,
+      });
+
+      mockPrisma.videoInterview.findUnique.mockResolvedValue({
+        id: 'sess-4',
+        status: 'IN_PROGRESS',
+        metadata: { questions: [{ id: 'q1' }] },
+        responses: [{ processingStatus: 'TRANSCRIBED' }],
+      });
+      mockPrisma.videoInterview.updateMany.mockResolvedValue({ count: 1 });
+      const remove = jest.fn();
+      mockQueue.getJob.mockResolvedValueOnce({
+        remove,
+        getState: jest.fn().mockResolvedValue('active'),
+      });
+
+      await processor.processTranscription({
+        data: { responseId: 'resp-4', sessionId: 'sess-4', lang: 'en' },
+      } as never);
+
+      expect(remove).not.toHaveBeenCalled();
+      expect(mockQueue.add).not.toHaveBeenCalled();
     });
 
     it('does not enqueue a second EVALUATE when another worker already claimed', async () => {

@@ -99,9 +99,28 @@ describe('FfmpegService.downloadToTempFile (DoS)', () => {
     ).rejects.toThrow(/maximum allowed size/);
   });
 
-  it('defaults max bytes when env is unset', () => {
-    const svc = new FfmpegService(configWith({}));
-    expect(DEFAULT_VIDEO_MAX_BYTES).toBe(100 * 1024 * 1024);
-    expect(svc).toBeDefined();
+  it('fails when the download deadline elapses (tarpit protection)', async () => {
+    const svc = new FfmpegService(
+      configWith({
+        VIDEO_INTERVIEW_MAX_BYTES: String(10_000_000),
+        VIDEO_INTERVIEW_DOWNLOAD_TIMEOUT_MS: '30',
+      }),
+    );
+
+    jest.spyOn(global, 'fetch').mockImplementation((_url, init) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      return new Promise((_resolve, reject) => {
+        const onAbort = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+        if (signal?.aborted) {
+          onAbort();
+          return;
+        }
+        signal?.addEventListener('abort', onAbort, { once: true });
+      }) as Promise<Response>;
+    });
+
+    await expect(
+      svc.downloadToTempFile('https://cdn.example/tarpit.webm'),
+    ).rejects.toThrow();
   });
 });

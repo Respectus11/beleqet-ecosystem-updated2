@@ -86,12 +86,13 @@ describe('VideoInterview × Multi-Currency Integration', () => {
 
   let service: VideoInterviewService;
   let prisma: typeof mockPrisma;
+  let moduleRef: TestingModule;
 
   beforeEach(async () => {
     createdSession = null;
     jest.clearAllMocks();
 
-    const module: TestingModule = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       providers: [
         VideoInterviewService,
         { provide: PrismaService, useValue: mockPrisma },
@@ -112,8 +113,12 @@ describe('VideoInterview × Multi-Currency Integration', () => {
       ],
     }).compile();
 
-    service = module.get(VideoInterviewService);
+    service = moduleRef.get(VideoInterviewService);
     prisma = mockPrisma;
+  });
+
+  afterEach(async () => {
+    await moduleRef.close();
   });
 
   it('creates a video interview without mutating multi-currency payment/referral rows', async () => {

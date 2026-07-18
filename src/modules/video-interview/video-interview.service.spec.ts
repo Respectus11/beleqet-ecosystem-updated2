@@ -39,9 +39,10 @@ const mockConfig = {
 
 describe('VideoInterviewService', () => {
   let service: VideoInterviewService;
+  let moduleRef: TestingModule;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       providers: [
         VideoInterviewService,
         { provide: PrismaService, useValue: mockPrisma },
@@ -52,10 +53,13 @@ describe('VideoInterviewService', () => {
       ],
     }).compile();
 
-    service = module.get<VideoInterviewService>(VideoInterviewService);
+    service = moduleRef.get<VideoInterviewService>(VideoInterviewService);
   });
 
-  afterEach(() => jest.clearAllMocks());
+  afterEach(async () => {
+    jest.clearAllMocks();
+    await moduleRef.close();
+  });
 
   // ── createSession ──────────────────────────────────────────────────────
 

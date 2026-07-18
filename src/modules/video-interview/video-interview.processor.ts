@@ -102,7 +102,8 @@ export class VideoInterviewProcessor extends WorkerHost {
       const whisperResult = await this.circuitBreaker.execute(
         'whisper',
         () => this.callWhisper(videoResponse.videoUrl!, videoResponse.language),
-        { failureThreshold: 3, timeout: 60_000 },
+        // timeout = OPEN cooldown; executionTimeout = hard cap on Whisper/FFmpeg
+        { failureThreshold: 3, timeout: 60_000, executionTimeout: 120_000 },
         lang,
       );
 
@@ -165,7 +166,8 @@ export class VideoInterviewProcessor extends WorkerHost {
       const evaluation = await this.circuitBreaker.execute(
         'ollama',
         () => this.callOllama(transcripts),
-        { failureThreshold: 3, timeout: 120_000 },
+        // timeout = OPEN cooldown; executionTimeout = hard cap on Ollama/OpenAI
+        { failureThreshold: 3, timeout: 120_000, executionTimeout: 180_000 },
         lang,
       );
 
@@ -377,7 +379,7 @@ ${qa}`;
    *
    * Dedup strategy (both required):
    * 1. Atomic claim via status → PROCESSING (allows re-claim after COMPLETED/FAILED re-record).
-   * 2. Stable Bull `jobId` with prior job removal so re-evals are not blocked by a finished job.
+   * 2. Stable Bull `jobId`; only remove terminal (completed/failed) jobs — never active ones.
    */
   private async maybeEnqueueEvaluation(sessionId: string, lang: string): Promise<void> {
     const session = await this.prisma.videoInterview.findUnique({
@@ -412,10 +414,18 @@ ${qa}`;
     this.logger.log(`All ${totalQuestions} responses transcribed — queuing evaluation`);
     const jobId = `evaluate-${sessionId}`;
     try {
-      // Re-record path: a completed/failed EVALUATE may still occupy this jobId
       const existing = await this.videoQueue.getJob(jobId);
       if (existing) {
-        await existing.remove();
+        const state = await existing.getState();
+        // Removing an active/waiting job throws in BullMQ — only clear terminal jobs
+        if (state === 'completed' || state === 'failed') {
+          await existing.remove();
+        } else {
+          this.logger.log(
+            `EVALUATE job already ${state} for session ${sessionId} — skipping re-enqueue`,
+          );
+          return;
+        }
       }
 
       await this.videoQueue.add(

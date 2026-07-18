@@ -18,6 +18,11 @@ interface CircuitBreakerOptions {
   successThreshold: number;
   /** Milliseconds to wait in OPEN state before transitioning to HALF_OPEN. Default: 30 000 */
   timeout: number;
+  /**
+   * Max milliseconds the downstream `action` may run before failing.
+   * Independent of {@link timeout} (cooldown). Default: 60 000.
+   */
+  executionTimeout: number;
 }
 
 interface CircuitSnapshot {
@@ -39,7 +44,7 @@ interface CircuitSnapshot {
  * const result = await this.circuitBreaker.execute(
  *   'whisper',
  *   () => this.callWhisperApi(url),
- *   { failureThreshold: 3, timeout: 30_000 },
+ *   { failureThreshold: 3, timeout: 30_000, executionTimeout: 60_000 },
  *   lang,
  * );
  * ```
@@ -48,6 +53,8 @@ interface CircuitSnapshot {
  * - **CLOSED** → normal, all requests pass through.
  * - **OPEN**   → fast-fail with i18n `video_interview.service_unavailable`.
  * - **HALF_OPEN** → exactly one probe is allowed at a time; success → CLOSED, failure → OPEN.
+ *
+ * `timeout` = OPEN cooldown before HALF_OPEN. `executionTimeout` = hard cap on `action`.
  */
 @Injectable()
 export class CircuitBreakerService {
@@ -57,6 +64,7 @@ export class CircuitBreakerService {
     failureThreshold: 3,
     successThreshold: 2,
     timeout: 30_000,
+    executionTimeout: 60_000,
   };
 
   constructor(private readonly i18n: I18nService) {}
@@ -102,7 +110,7 @@ export class CircuitBreakerService {
     }
 
     try {
-      const result = await action();
+      const result = await this.runWithExecutionTimeout(action, opts.executionTimeout, circuitName);
       this.recordSuccess(circuitName, circuit, opts);
       return result;
     } catch (err) {
@@ -129,6 +137,42 @@ export class CircuitBreakerService {
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Race `action` against an execution deadline so stalled Whisper/Ollama calls
+   * cannot hang BullMQ workers forever. Distinct from OPEN-state cooldown `timeout`.
+   */
+  private async runWithExecutionTimeout<T>(
+    action: () => Promise<T>,
+    executionTimeoutMs: number,
+    circuitName: string,
+  ): Promise<T> {
+    if (!Number.isFinite(executionTimeoutMs) || executionTimeoutMs <= 0) {
+      return action();
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        action(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(
+              new Error(
+                `CircuitBreaker execution timeout after ${executionTimeoutMs}ms (${circuitName})`,
+              ),
+            );
+          }, executionTimeoutMs);
+          // Don't keep the process alive solely for this timer
+          if (typeof timer === 'object' && 'unref' in timer) {
+            (timer as NodeJS.Timeout).unref();
+          }
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
 
   private async fastFail(circuitName: string, lang: string): Promise<never> {
     const message = await this.i18n.t('video_interview.service_unavailable', { lang });

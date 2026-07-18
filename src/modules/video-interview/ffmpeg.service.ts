@@ -15,6 +15,9 @@ const execFileAsync = promisify(execFile);
 /** Default max download size for interview videos (100 MiB). */
 export const DEFAULT_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
 
+/** Default overall download deadline (2 minutes) — blocks tarpit / slow-loris streams. */
+export const DEFAULT_VIDEO_DOWNLOAD_TIMEOUT_MS = 120_000;
+
 /**
  * Service for FFmpeg-based video pre-processing before Whisper transcription.
  *
@@ -35,15 +38,18 @@ export class FfmpegService {
 
   /**
    * Stream a remote video URL directly to a temp file without buffering the body in RAM.
-   * Enforces a hard byte cap and refuses to follow redirects (SSRF/DoS hardening).
+   * Enforces a hard byte cap, overall download deadline (tarpit protection),
+   * and refuses to follow redirects (SSRF/DoS hardening).
    *
    * @param url  Public or signed URL of the uploaded interview video.
    * @returns    Path to the written temp file (caller must delete).
    */
   async downloadToTempFile(url: string): Promise<string> {
     const maxBytes = this.getMaxBytes();
+    const timeoutMs = this.getDownloadTimeoutMs();
+    const abort = AbortSignal.timeout(timeoutMs);
 
-    const response = await fetch(url, { redirect: 'error' });
+    const response = await fetch(url, { redirect: 'error', signal: abort });
     if (!response.ok) {
       throw new Error(`Failed to fetch video: ${response.statusText}`);
     }
@@ -68,11 +74,21 @@ export class FfmpegService {
     );
     const sizeGuard = this.createSizeLimitTransform(maxBytes);
 
+    const onAbort = () => {
+      nodeStream.destroy(new Error(`Video download timed out after ${timeoutMs}ms`));
+    };
+    abort.addEventListener('abort', onAbort, { once: true });
+
     try {
       await pipeline(nodeStream, sizeGuard, createWriteStream(outputPath));
     } catch (err) {
       await unlink(outputPath).catch(() => {});
+      if (abort.aborted) {
+        throw new Error(`Video download timed out after ${timeoutMs}ms`);
+      }
       throw err;
+    } finally {
+      abort.removeEventListener('abort', onAbort);
     }
 
     this.logger.log(`Streamed video to disk: ${outputPath} (${sizeGuard.bytesRead} bytes)`);
@@ -193,6 +209,14 @@ export class FfmpegService {
     const raw = this.config.get<string>('VIDEO_INTERVIEW_MAX_BYTES');
     const parsed = raw ? Number(raw) : DEFAULT_VIDEO_MAX_BYTES;
     return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_VIDEO_MAX_BYTES;
+  }
+
+  private getDownloadTimeoutMs(): number {
+    const raw = this.config.get<string>('VIDEO_INTERVIEW_DOWNLOAD_TIMEOUT_MS');
+    const parsed = raw ? Number(raw) : DEFAULT_VIDEO_DOWNLOAD_TIMEOUT_MS;
+    return Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : DEFAULT_VIDEO_DOWNLOAD_TIMEOUT_MS;
   }
 
   private createSizeLimitTransform(maxBytes: number): Transform & { bytesRead: number } {
