@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Process, Processor } from '@nestjs/bull';
-import { Job } from 'bull';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
@@ -14,23 +14,34 @@ import { PrismaService } from '../../prisma/prisma.service';
  */
 @Processor('salary')
 @Injectable()
-export class SalaryProcessor {
+export class SalaryProcessor extends WorkerHost {
   private readonly logger = new Logger(SalaryProcessor.name);
 
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(private readonly prismaService: PrismaService) {
+    super();
+  }
 
-  /**
-   * Update salary predictions daily
-   * Refreshes predictions that are older than 7 days
-   *
-   * @param job - Bull queue job
-   */
-  @Process('update-predictions')
-  async updatePredictions(job: Job): Promise<void> {
+  async process(job: Job): Promise<void> {
+    switch (job.name) {
+      case 'update-predictions':
+        return this.handleUpdatePredictions(job);
+      case 'compute-analytics':
+        return this.handleComputeAnalytics(job);
+      case 'archive-old-data':
+        return this.handleArchiveOldData(job);
+      case 'generate-reports':
+        return this.handleGenerateReports(job);
+      case 'anonymize-data':
+        return this.handleAnonymizeData(job);
+      default:
+        this.logger.warn(`[Job: ${job.name}] Unknown job name`);
+    }
+  }
+
+  private async handleUpdatePredictions(job: Job): Promise<void> {
     this.logger.log('[Job: update-predictions] Starting salary prediction updates...');
 
     try {
-      // Find stale predictions (older than 7 days)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -40,15 +51,13 @@ export class SalaryProcessor {
             lt: sevenDaysAgo,
           },
         },
-        take: 100, // Process in batches of 100
+        take: 100,
       });
 
       this.logger.log(
         `[Job: update-predictions] Found ${stalePredictions.length} stale predictions`,
       );
 
-      // Archive to history BEFORE updating/recomputing in a transaction
-      // to avoid race conditions and ensure data consistency.
       const BATCH_SIZE = 20;
       for (let i = 0; i < stalePredictions.length; i += BATCH_SIZE) {
         const batch = stalePredictions.slice(i, i + BATCH_SIZE);
@@ -75,8 +84,6 @@ export class SalaryProcessor {
         });
       }
 
-      // Recompute market values so predictions do NOT stagnate.
-      // This mirrors SalaryService.calculatePredictionFromJobData() logic.
       const now = new Date();
       for (let i = 0; i < stalePredictions.length; i += BATCH_SIZE) {
         const batch = stalePredictions.slice(i, i + BATCH_SIZE);
@@ -170,26 +177,17 @@ export class SalaryProcessor {
       this.logger.log(
         `[Job: update-predictions] Successfully updated ${stalePredictions.length} predictions`,
       );
-      job.progress(100);
+      await job.updateProgress(100);
     } catch (error) {
       this.logger.error('[Job: update-predictions] Error updating predictions:', error);
       throw error;
     }
   }
 
-  /**
-   * Compute salary analytics
-   * Aggregates salary data for dashboard and reporting
-   *
-   * @param job - Bull queue job
-   */
-  @Process('compute-analytics')
-  async computeAnalytics(job: Job): Promise<void> {
+  private async handleComputeAnalytics(job: Job): Promise<void> {
     this.logger.log('[Job: compute-analytics] Starting salary analytics computation...');
 
     try {
-      // Get unique location + industry combinations in a single query
-      // to avoid N+1 queries when iterating locations and industries.
       const groups = await this.prismaService.salaryPrediction.groupBy({
         by: ['location', 'industry'],
         where: { isAnonymized: true },
@@ -228,11 +226,8 @@ export class SalaryProcessor {
         }
 
         const topJobTitles = this.getTopJobTitles(predictions, 5);
-
-        // Compute growth rate
         const growthRate = await this.computeGrowthRate(group.location, group.industry);
 
-        // Store or update analytics
         await this.prismaService.salaryAnalytics.upsert({
           where: {
             id: `${group.location}-${group.industry}-analytics`,
@@ -259,7 +254,7 @@ export class SalaryProcessor {
         });
 
         completedTasks++;
-        job.progress((completedTasks / totalTasks) * 100);
+        await job.updateProgress((completedTasks / totalTasks) * 100);
       }
 
       this.logger.log('[Job: compute-analytics] Analytics computation completed');
@@ -269,21 +264,13 @@ export class SalaryProcessor {
     }
   }
 
-  /**
-   * Archive old salary data
-   * Removes predictions older than 1 year (optional GDPR compliance)
-   *
-   * @param job - Bull queue job
-   */
-  @Process('archive-old-data')
-  async archiveOldData(job: Job): Promise<void> {
+  private async handleArchiveOldData(job: Job): Promise<void> {
     this.logger.log('[Job: archive-old-data] Starting old data archival...');
 
     try {
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-      // Archive old predictions to history
       const oldPredictions = await this.prismaService.salaryPrediction.findMany({
         where: {
           createdAt: {
@@ -334,21 +321,14 @@ export class SalaryProcessor {
       this.logger.log(
         `[Job: archive-old-data] Archived and deleted ${oldPredictions.length} predictions`,
       );
-      job.progress(100);
+      await job.updateProgress(100);
     } catch (error) {
       this.logger.error('[Job: archive-old-data] Error archiving old data:', error);
       throw error;
     }
   }
 
-  /**
-   * Generate salary reports
-   * Creates market reports for specific locations/industries
-   *
-   * @param job - Bull queue job
-   */
-  @Process('generate-reports')
-  async generateReports(job: Job): Promise<void> {
+  private async handleGenerateReports(job: Job): Promise<void> {
     this.logger.log('[Job: generate-reports] Starting salary report generation...');
 
     try {
@@ -367,28 +347,20 @@ export class SalaryProcessor {
       }
 
       this.logger.log('[Job: generate-reports] Report generation completed');
-      job.progress(100);
+      await job.updateProgress(100);
     } catch (error) {
       this.logger.error('[Job: generate-reports] Error generating reports:', error);
       throw error;
     }
   }
 
-  /**
-   * Anonymize sensitive salary data for GDPR compliance
-   * Ensures no PII is retained in historical records
-   *
-   * @param job - Bull queue job
-   */
-  @Process('anonymize-data')
-  async anonymizeData(job: Job): Promise<void> {
+  private async handleAnonymizeData(job: Job): Promise<void> {
     this.logger.log('[Job: anonymize-data] Starting data anonymization for GDPR...');
 
     try {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Update old records to ensure anonymization
       const result = await this.prismaService.salaryHistory.updateMany({
         where: {
           recordedAt: {
@@ -402,18 +374,13 @@ export class SalaryProcessor {
       });
 
       this.logger.log(`[Job: anonymize-data] Anonymized ${result.count} records`);
-      job.progress(100);
+      await job.updateProgress(100);
     } catch (error) {
       this.logger.error('[Job: anonymize-data] Error anonymizing data:', error);
       throw error;
     }
   }
 
-  // ============= Private Helper Methods =============
-
-  /**
-   * Get top N job titles by frequency
-   */
   private getTopJobTitles(predictions: any[], n: number): string[] {
     const titleCounts = predictions.reduce(
       (acc, p) => {
@@ -429,9 +396,6 @@ export class SalaryProcessor {
       .map(([title]) => title);
   }
 
-  /**
-   * Compute salary growth rate between periods
-   */
   private async computeGrowthRate(location: string, industry: string | null): Promise<number> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -463,7 +427,6 @@ export class SalaryProcessor {
     const recentAvg = recent.reduce((sum, h) => sum + h.averageSalary, 0) / recent.length;
     const olderAvg = older.reduce((sum, h) => sum + h.averageSalary, 0) / older.length;
 
-    // Safeguard against division-by-zero / non-finite numbers
     if (!Number.isFinite(olderAvg) || olderAvg === 0) {
       return 0;
     }
