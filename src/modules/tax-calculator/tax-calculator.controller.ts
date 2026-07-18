@@ -35,39 +35,118 @@ export class TaxCalculatorController {
   @ApiResponse({ status: 200, description: 'Tax calculation result' })
   @ApiResponse({
     status: 400,
-    description: 'Validation failed or unsupported tax jurisdiction',
+    description:
+      'Validation failed, unsupported jurisdiction, or currency/jurisdiction mismatch',
   })
   async calculate(@Body() dto: CalculateTaxDto): Promise<TaxCalculationResult> {
     try {
       return this.taxCalculatorService.calculate(dto);
     } catch (error) {
       if (error instanceof BadRequestException) {
-        const message = this.i18n.t('messages.tax.unsupportedJurisdiction', {
-          args: { countryCode: dto.countryCode?.toUpperCase?.() ?? dto.countryCode },
-          defaultValue: `Unsupported tax jurisdiction "${dto.countryCode}". Supported: ET, US.`,
-        });
-
-        throw new BadRequestException({
-          statusCode: HttpStatus.BAD_REQUEST,
-          errorCode: 'ERR_TAX_UNSUPPORTED_JURISDICTION',
-          message: typeof message === 'string' ? message : String(message),
-          countryCode: dto.countryCode?.toUpperCase?.() ?? dto.countryCode,
-        });
+        throw await this.mapBadRequest(error, dto);
       }
 
       if (error instanceof HttpException) {
         throw error;
       }
 
-      const message = this.i18n.t('messages.tax.calculationFailed', {
-        defaultValue: 'Tax calculation failed. Please try again.',
-      });
+      const message = await this.resolveI18nMessage(
+        'messages.tax.calculationFailed',
+        'Tax calculation failed. Please try again.',
+      );
 
       throw new InternalServerErrorException({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         errorCode: 'ERR_TAX_CALCULATION_FAILED',
-        message: typeof message === 'string' ? message : String(message),
+        message,
       });
     }
+  }
+
+  private async mapBadRequest(
+    error: BadRequestException,
+    dto: CalculateTaxDto,
+  ): Promise<BadRequestException> {
+    const response = error.getResponse();
+    const payload =
+      typeof response === 'object' && response !== null
+        ? (response as Record<string, unknown>)
+        : {};
+    const errorCode =
+      typeof payload.errorCode === 'string' ? payload.errorCode : undefined;
+    const countryCode =
+      (typeof payload.countryCode === 'string'
+        ? payload.countryCode
+        : dto.countryCode?.toUpperCase?.() ?? dto.countryCode) || undefined;
+
+    if (errorCode === 'ERR_TAX_CURRENCY_MISMATCH') {
+      const expectedCurrency =
+        typeof payload.expectedCurrency === 'string'
+          ? payload.expectedCurrency
+          : countryCode === 'ET'
+            ? 'ETB'
+            : countryCode === 'US'
+              ? 'USD'
+              : undefined;
+
+      const message = await this.resolveI18nMessage(
+        'messages.tax.currencyMismatch',
+        `Currency "${dto.currency}" does not match jurisdiction "${countryCode}". Expected ${expectedCurrency}.`,
+        {
+          countryCode,
+          currency: dto.currency,
+          expectedCurrency,
+        },
+      );
+
+      return new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        errorCode: 'ERR_TAX_CURRENCY_MISMATCH',
+        message,
+        countryCode,
+        currency: dto.currency,
+        expectedCurrency,
+      });
+    }
+
+    if (errorCode === 'ERR_TAX_INVALID_GROSS_INCOME') {
+      const message = await this.resolveI18nMessage(
+        'messages.tax.invalidGrossIncome',
+        'grossIncome must be a finite number in smallest currency units.',
+      );
+
+      return new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        errorCode: 'ERR_TAX_INVALID_GROSS_INCOME',
+        message,
+      });
+    }
+
+    const message = await this.resolveI18nMessage(
+      'messages.tax.unsupportedJurisdiction',
+      `Unsupported tax jurisdiction "${countryCode}". Supported: ET, US.`,
+      { countryCode },
+    );
+
+    return new BadRequestException({
+      statusCode: HttpStatus.BAD_REQUEST,
+      errorCode: 'ERR_TAX_UNSUPPORTED_JURISDICTION',
+      message,
+      countryCode,
+    });
+  }
+
+  private async resolveI18nMessage(
+    key: string,
+    defaultValue: string,
+    args?: Record<string, unknown>,
+  ): Promise<string> {
+    const translated = await this.i18n.t(key, { args, defaultValue });
+
+    if (typeof translated === 'string') {
+      return translated;
+    }
+
+    return defaultValue;
   }
 }

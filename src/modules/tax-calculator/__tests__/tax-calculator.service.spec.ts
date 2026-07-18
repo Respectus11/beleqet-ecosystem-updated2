@@ -138,66 +138,130 @@ describe('TaxCalculatorService', () => {
   });
 
   describe('United States (US) progressive brackets', () => {
-    it('calculates 10% on income at the first-bracket ceiling ($11,925)', () => {
-      const result = service.calculate({
+    /**
+     * TY 2024/2025 single-filer standard deduction: $14,600 = 1_460_000 cents.
+     * taxableIncome = max(0, grossIncome − 1_460_000)
+     * Brackets then apply to taxableIncome; effectiveTaxRate uses grossIncome.
+     */
+    it('returns zero tax when gross is at or below the $14,600 standard deduction', () => {
+      const atDeduction = service.calculate({
+        grossIncome: 1_460_000,
+        currency: TaxCurrency.USD,
+        countryCode: 'US',
+      });
+      expect(atDeduction.taxAmount).toBe(0);
+      expect(atDeduction.netIncome).toBe(1_460_000);
+      expect(atDeduction.effectiveTaxRate).toBe(0);
+      expect(atDeduction.grossIncome).toBe(1_460_000);
+
+      const belowDeduction = service.calculate({
         grossIncome: 1_192_500,
         currency: TaxCurrency.USD,
         countryCode: 'US',
       });
-
-      expect(result.taxAmount).toBe(119_250);
-      expect(result.countryCode).toBe('US');
-      expect(result.currency).toBe(TaxCurrency.USD);
+      expect(belowDeduction.taxAmount).toBe(0);
+      expect(belowDeduction.netIncome).toBe(1_192_500);
+      expect(belowDeduction.effectiveTaxRate).toBe(0);
+      expect(belowDeduction.countryCode).toBe('US');
+      expect(belowDeduction.currency).toBe(TaxCurrency.USD);
     });
 
-    it('calculates tax at the top of the 12% band ($48,475)', () => {
+    it('taxes only the amount above the standard deduction ($14,601)', () => {
+      // taxable = 100 cents @ 10% → 10 cents tax
+      const result = service.calculate({
+        grossIncome: 1_460_100,
+        currency: TaxCurrency.USD,
+        countryCode: 'US',
+      });
+
+      expect(result.taxAmount).toBe(10);
+      expect(result.netIncome).toBe(1_460_090);
+      expect(result.effectiveTaxRate).toBe(0.000007);
+    });
+
+    it('calculates tax at the top of the 12% band ($48,475) after deduction', () => {
+      // taxable = 4_847_500 − 1_460_000 = 3_387_500 → tax 382_650
       const result = service.calculate({
         grossIncome: 4_847_500,
         currency: TaxCurrency.USD,
         countryCode: 'US',
       });
 
-      expect(result.taxAmount).toBe(557_850);
+      expect(result.taxAmount).toBe(382_650);
+      expect(result.netIncome).toBe(4_464_850);
+      expect(result.effectiveTaxRate).toBe(0.078938);
     });
 
-    it('calculates progressive tax for $50,000', () => {
+    it('calculates progressive tax for $50,000 after deduction', () => {
+      // taxable = 5_000_000 − 1_460_000 = 3_540_000 → tax 400_950
       const result = service.calculate({
         grossIncome: 5_000_000,
         currency: TaxCurrency.USD,
         countryCode: 'US',
       });
 
-      expect(result.taxAmount).toBe(591_400);
+      expect(result.taxAmount).toBe(400_950);
+      expect(result.netIncome).toBe(4_599_050);
+      expect(result.effectiveTaxRate).toBe(0.08019);
     });
 
-    it('calculates progressive tax for $100,000', () => {
+    it('calculates progressive tax for $100,000 after deduction', () => {
+      // taxable = 10_000_000 − 1_460_000 = 8_540_000 → tax 1_370_200
       const result = service.calculate({
         grossIncome: 10_000_000,
         currency: TaxCurrency.USD,
         countryCode: 'US',
       });
 
-      expect(result.taxAmount).toBe(1_691_400);
+      expect(result.taxAmount).toBe(1_370_200);
+      expect(result.netIncome).toBe(8_629_800);
+      expect(result.effectiveTaxRate).toBe(0.13702);
     });
 
-    it('calculates progressive tax for $200,000', () => {
+    it('calculates progressive tax for $200,000 after deduction', () => {
+      // taxable = 20_000_000 − 1_460_000 = 18_540_000 → tax 3_734_300
       const result = service.calculate({
         grossIncome: 20_000_000,
         currency: TaxCurrency.USD,
         countryCode: 'US',
       });
 
-      expect(result.taxAmount).toBe(4_106_300);
+      expect(result.taxAmount).toBe(3_734_300);
+      expect(result.netIncome).toBe(16_265_700);
+      expect(result.effectiveTaxRate).toBe(0.186715);
     });
 
-    it('applies top 37% marginal rate for $700,000', () => {
+    it('applies top 37% marginal rate for $700,000 after deduction', () => {
+      // taxable = 70_000_000 − 1_460_000 = 68_540_000 → tax 21_061_825
       const result = service.calculate({
         grossIncome: 70_000_000,
         currency: TaxCurrency.USD,
         countryCode: 'US',
       });
 
-      expect(result.taxAmount).toBe(21_602_025);
+      expect(result.taxAmount).toBe(21_061_825);
+      expect(result.netIncome).toBe(48_938_175);
+      expect(result.effectiveTaxRate).toBe(0.300883);
+    });
+
+    it('uses grossIncome (not taxable income) for effectiveTaxRate', () => {
+      const result = service.calculate({
+        grossIncome: 5_000_000,
+        currency: TaxCurrency.USD,
+        countryCode: 'US',
+      });
+
+      const expectedRate =
+        Number(
+          (BigInt(result.taxAmount) * 1_000_000n +
+            BigInt(result.grossIncome) / 2n) /
+            BigInt(result.grossIncome),
+        ) / 1_000_000;
+
+      expect(result.taxAmount).toBe(400_950);
+      expect(result.effectiveTaxRate).toBe(expectedRate);
+      expect(result.effectiveTaxRate).toBe(0.08019);
+      expect(result.grossIncome).toBe(5_000_000);
     });
   });
 
@@ -304,13 +368,105 @@ describe('TaxCalculatorService', () => {
         }),
       ).toThrow(BadRequestException);
 
-      expect(() =>
+      try {
         service.calculate({
           grossIncome: 1_000_000,
           currency: TaxCurrency.USD,
           countryCode: 'XX',
-        }),
-      ).toThrow(/Unsupported tax jurisdiction/);
+        });
+        fail('expected BadRequestException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        const body = (error as BadRequestException).getResponse() as Record<
+          string,
+          unknown
+        >;
+        expect(body.errorCode).toBe('ERR_TAX_UNSUPPORTED_JURISDICTION');
+        expect(String(body.message)).toMatch(/Unsupported tax jurisdiction/);
+      }
+    });
+  });
+
+  describe('currency vs jurisdiction mismatch', () => {
+    it('rejects ET with USD', () => {
+      try {
+        service.calculate({
+          grossIncome: 1_000_000,
+          currency: TaxCurrency.USD,
+          countryCode: 'ET',
+        });
+        fail('expected BadRequestException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        const body = (error as BadRequestException).getResponse() as Record<
+          string,
+          unknown
+        >;
+        expect(body.errorCode).toBe('ERR_TAX_CURRENCY_MISMATCH');
+        expect(body.expectedCurrency).toBe('ETB');
+      }
+    });
+
+    it('rejects US with ETB', () => {
+      try {
+        service.calculate({
+          grossIncome: 1_000_000,
+          currency: TaxCurrency.ETB,
+          countryCode: 'US',
+        });
+        fail('expected BadRequestException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        const body = (error as BadRequestException).getResponse() as Record<
+          string,
+          unknown
+        >;
+        expect(body.errorCode).toBe('ERR_TAX_CURRENCY_MISMATCH');
+        expect(body.expectedCurrency).toBe('USD');
+      }
+    });
+  });
+
+  describe('floating-point grossIncome defense', () => {
+    it('safely rounds near-integer floats before BigInt math', () => {
+      const result = service.calculate({
+        grossIncome: 12_000_000.4,
+        currency: TaxCurrency.ETB,
+        countryCode: 'ET',
+      });
+
+      expect(result.grossIncome).toBe(12_000_000);
+      expect(Number.isInteger(result.taxAmount)).toBe(true);
+      expect(result.netIncome).toBe(result.grossIncome - result.taxAmount);
+    });
+
+    it('rounds half-up style floats via Math.round', () => {
+      const result = service.calculate({
+        grossIncome: 5_000_000.6,
+        currency: TaxCurrency.USD,
+        countryCode: 'US',
+      });
+
+      expect(result.grossIncome).toBe(5_000_001);
+      expect(Number.isInteger(result.taxAmount)).toBe(true);
+    });
+
+    it('rejects non-finite grossIncome', () => {
+      try {
+        service.calculate({
+          grossIncome: Number.NaN,
+          currency: TaxCurrency.ETB,
+          countryCode: 'ET',
+        });
+        fail('expected BadRequestException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        const body = (error as BadRequestException).getResponse() as Record<
+          string,
+          unknown
+        >;
+        expect(body.errorCode).toBe('ERR_TAX_INVALID_GROSS_INCOME');
+      }
     });
   });
 });

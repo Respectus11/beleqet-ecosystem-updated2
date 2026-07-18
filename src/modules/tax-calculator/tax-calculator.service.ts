@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   CalculateTaxDto,
   TaxCalculationResult,
+  TaxCurrency,
 } from './dto/calculate-tax.dto';
 
 interface TaxBracket {
@@ -11,6 +12,14 @@ interface TaxBracket {
 
 const SMALLEST_UNITS_PER_MAJOR = 100;
 const MONTHS_PER_YEAR = 12;
+
+/** IRS TY 2024/2025 standard deduction for a single filer ($14,600). */
+const US_STANDARD_DEDUCTION_SINGLE_CENTS = 1_460_000;
+
+const EXPECTED_CURRENCY: Record<'ET' | 'US', TaxCurrency> = {
+  ET: TaxCurrency.ETB,
+  US: TaxCurrency.USD,
+};
 
 @Injectable()
 export class TaxCalculatorService {
@@ -41,8 +50,11 @@ export class TaxCalculatorService {
   ];
 
   calculate(dto: CalculateTaxDto): TaxCalculationResult {
-    const { grossIncome, currency, countryCode } = dto;
+    const { currency, countryCode } = dto;
     const code = countryCode.toUpperCase();
+
+    this.assertCurrencyMatchesJurisdiction(code, currency);
+    const grossIncome = this.normalizeGrossIncome(dto.grossIncome);
 
     let taxAmount: number;
 
@@ -54,9 +66,12 @@ export class TaxCalculatorService {
         taxAmount = this.calculateUnitedStatesTax(grossIncome);
         break;
       default:
-        throw new BadRequestException(
-          `Unsupported tax jurisdiction "${countryCode}". Supported: ET, US.`,
-        );
+        throw new BadRequestException({
+          statusCode: 400,
+          errorCode: 'ERR_TAX_UNSUPPORTED_JURISDICTION',
+          message: `Unsupported tax jurisdiction "${countryCode}". Supported: ET, US.`,
+          countryCode: code,
+        });
     }
 
     const netIncome = grossIncome - taxAmount;
@@ -72,6 +87,44 @@ export class TaxCalculatorService {
     };
   }
 
+  private assertCurrencyMatchesJurisdiction(
+    countryCode: string,
+    currency: TaxCurrency,
+  ): void {
+    if (countryCode !== 'ET' && countryCode !== 'US') {
+      return;
+    }
+
+    const expected = EXPECTED_CURRENCY[countryCode];
+    if (currency !== expected) {
+      throw new BadRequestException({
+        statusCode: 400,
+        errorCode: 'ERR_TAX_CURRENCY_MISMATCH',
+        message: `Currency "${currency}" does not match jurisdiction "${countryCode}". Expected ${expected}.`,
+        countryCode,
+        currency,
+        expectedCurrency: expected,
+      });
+    }
+  }
+
+  private normalizeGrossIncome(grossIncome: number): number {
+    if (typeof grossIncome !== 'number' || !Number.isFinite(grossIncome)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        errorCode: 'ERR_TAX_INVALID_GROSS_INCOME',
+        message:
+          'grossIncome must be a finite number in smallest currency units.',
+      });
+    }
+
+    if (Number.isInteger(grossIncome)) {
+      return grossIncome;
+    }
+
+    return Math.round(grossIncome);
+  }
+
   private calculateEthiopianTax(annualSantim: number): number {
     const brackets = this.toSmallestUnitBrackets(
       TaxCalculatorService.ET_MONTHLY_BRACKETS_MAJOR,
@@ -81,11 +134,16 @@ export class TaxCalculatorService {
   }
 
   private calculateUnitedStatesTax(annualCents: number): number {
+    const taxableIncome = annualCents - US_STANDARD_DEDUCTION_SINGLE_CENTS;
+    if (taxableIncome <= 0) {
+      return 0;
+    }
+
     const brackets = this.toSmallestUnitBrackets(
       TaxCalculatorService.US_FEDERAL_SINGLE_BRACKETS_MAJOR,
       1,
     );
-    return this.applyProgressiveBrackets(annualCents, brackets);
+    return this.applyProgressiveBrackets(taxableIncome, brackets);
   }
 
   private toSmallestUnitBrackets(
@@ -147,8 +205,8 @@ export class TaxCalculatorService {
       return 0;
     }
 
-    const numerator =
-      BigInt(amountSmallest) * BigInt(rateBps) + 5_000n;
+    const amount = Math.trunc(amountSmallest);
+    const numerator = BigInt(amount) * BigInt(rateBps) + 5_000n;
     return Number(numerator / 10_000n);
   }
 
