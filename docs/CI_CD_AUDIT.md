@@ -148,8 +148,17 @@ features were added for the sake of the checklist.
   `docker_default_secret_please_change_in_production`). These are local-dev
   defaults, not real secrets; the new staging compose file uses environment
   interpolation with **no** default secrets.
-- No real tokens/keys were found in tracked files (secret scan results in
-  `docs/CI_CD_TEST_REPORT.md`).
+- **`webhook-server.js` (dev utility) hard-coded a real Chapa TEST-mode
+  secret key and a webhook secret.** Found by the gitleaks gate on the first
+  real CI run. The file now reads both values from the environment and exits
+  if they are absent. ⚠️ The old values remain in git history — **the
+  repository owner should rotate that Chapa test key and webhook secret**;
+  rotation requires Chapa dashboard access this task does not have.
+- No other real tokens/keys were found in tracked files. The remaining
+  gitleaks findings were all documented placeholders and synthetic test
+  fixtures, allowlisted narrowly in `.gitleaks.toml` (templates, the CI
+  test-env generator, and `*.spec.ts` mock data only — runtime code and
+  deployment surfaces remain fully scanned).
 
 ### 3.8 TypeScript / lint configuration
 

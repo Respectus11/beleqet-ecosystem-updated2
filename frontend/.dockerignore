@@ -8,3 +8,4 @@ npm-debug.log*
 next-env.d.ts
 e2e
 playwright.config.ts
+vite.config.ts
