@@ -11,7 +11,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl ffmpeg
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
@@ -28,7 +28,7 @@ FROM node:20-alpine AS pruner
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl ffmpeg
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
@@ -42,7 +42,11 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN apk add --no-cache openssl
+# ffmpeg/ffprobe are invoked at runtime by the video-interview module
+# (src/modules/video-interview/ffmpeg.service.ts execFile calls), not just
+# needed to build — must be present in the final image, matching upstream's
+# original single-stage Dockerfile which installed it in both stages.
+RUN apk add --no-cache openssl ffmpeg
 
 COPY --from=pruner --chown=node:node /app/package.json /app/package-lock.json ./
 COPY --from=pruner --chown=node:node /app/node_modules ./node_modules
