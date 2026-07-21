@@ -62,10 +62,7 @@ describe('GraphQL Resolvers', () => {
 
     beforeEach(async () => {
       const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          UsersResolver,
-          { provide: PrismaService, useValue: prisma },
-        ],
+        providers: [UsersResolver, { provide: PrismaService, useValue: prisma }],
       }).compile();
       resolver = module.get(UsersResolver);
     });
@@ -111,10 +108,7 @@ describe('GraphQL Resolvers', () => {
 
     beforeEach(async () => {
       const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          ApplicationsResolver,
-          { provide: PrismaService, useValue: prisma },
-        ],
+        providers: [ApplicationsResolver, { provide: PrismaService, useValue: prisma }],
       }).compile();
       resolver = module.get(ApplicationsResolver);
     });
@@ -180,10 +174,7 @@ describe('GraphQL Resolvers', () => {
 
     beforeEach(async () => {
       const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          AnalyticsResolver,
-          { provide: PrismaService, useValue: prisma },
-        ],
+        providers: [AnalyticsResolver, { provide: PrismaService, useValue: prisma }],
       }).compile();
       resolver = module.get(AnalyticsResolver);
     });
@@ -191,7 +182,7 @@ describe('GraphQL Resolvers', () => {
     it('should return analytics summary', async () => {
       prisma.user.count.mockResolvedValue(100);
       prisma.job.count
-        .mockResolvedValueOnce(50)  // totalJobs (first call)
+        .mockResolvedValueOnce(50) // totalJobs (first call)
         .mockResolvedValueOnce(40); // activeJobs (second call)
       prisma.application.count.mockResolvedValue(200);
       prisma.company.count.mockResolvedValue(20);

@@ -44,9 +44,7 @@ export class E2EEServerEncryptionService {
     const normalized = raw.length === 64 ? raw : raw.slice(0, 64);
     this.key = Buffer.from(normalized, 'hex');
     if (this.key.length !== 32) {
-      throw new Error(
-        'E2EE_SERVER_KEY must be 64 hex characters (32 bytes for AES-256).',
-      );
+      throw new Error('E2EE_SERVER_KEY must be 64 hex characters (32 bytes for AES-256).');
     }
     this.keyVersion = this.config.get<string>('E2EE_KEY_VERSION', 'v1');
   }
@@ -60,10 +58,7 @@ export class E2EEServerEncryptionService {
   encrypt(plaintext: string): { ciphertext: string; iv: string; keyVersion: string } {
     const iv = crypto.randomBytes(IV_LENGTH);
     const cipher = crypto.createCipheriv(ALGORITHM, this.key, iv);
-    const encrypted = Buffer.concat([
-      cipher.update(plaintext, 'utf8'),
-      cipher.final(),
-    ]);
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
     const authTag = cipher.getAuthTag();
     const payload = Buffer.concat([iv, authTag, encrypted]);
     return {
@@ -87,10 +82,7 @@ export class E2EEServerEncryptionService {
     const encrypted = payload.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
     const decipher = crypto.createDecipheriv(ALGORITHM, this.key, iv);
     decipher.setAuthTag(authTag);
-    const decrypted = Buffer.concat([
-      decipher.update(encrypted),
-      decipher.final(),
-    ]);
+    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
     return decrypted.toString('utf8');
   }
 

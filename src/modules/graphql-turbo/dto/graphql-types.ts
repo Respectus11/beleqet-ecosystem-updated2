@@ -41,7 +41,10 @@ export enum GqlApplicationStatus {
 registerEnumType(GqlUserRole, { name: 'GqlUserRole', description: 'User roles on the platform' });
 registerEnumType(GqlJobType, { name: 'GqlJobType', description: 'Types of employment' });
 registerEnumType(GqlJobStatus, { name: 'GqlJobStatus', description: 'Job listing statuses' });
-registerEnumType(GqlApplicationStatus, { name: 'GqlApplicationStatus', description: 'Application statuses' });
+registerEnumType(GqlApplicationStatus, {
+  name: 'GqlApplicationStatus',
+  description: 'Application statuses',
+});
 
 // ── Object Types ─────────────────────────────────────────────────────────
 
@@ -123,7 +126,8 @@ export class GqlJob {
   // Resolved fields (populated by DataLoaders)
   @Field(() => GqlCompany, { nullable: true }) company?: GqlCompany;
   @Field(() => GqlJobCategory, { nullable: true }) category?: GqlJobCategory;
-  @Field(() => Int, { nullable: true, description: 'Total applications count' }) applicationCount?: number;
+  @Field(() => Int, { nullable: true, description: 'Total applications count' })
+  applicationCount?: number;
 }
 
 /** GraphQL type for Application */

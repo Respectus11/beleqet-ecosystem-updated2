@@ -162,9 +162,7 @@ export class KeyExchangeService {
    * @param userIds - Array of user UUIDs
    * @returns Map of userId -> publicKey
    */
-  async getPublicKeysForUsers(
-    userIds: string[],
-  ): Promise<Map<string, string>> {
+  async getPublicKeysForUsers(userIds: string[]): Promise<Map<string, string>> {
     const keyPairs = await this.prisma.e2EKeyPair.findMany({
       where: { userId: { in: userIds } },
       select: { userId: true, publicKey: true },

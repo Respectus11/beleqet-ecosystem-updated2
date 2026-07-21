@@ -106,9 +106,7 @@ export function createApplicationCountLoader(prisma: PrismaService) {
       where: { jobId: { in: [...jobIds] } },
       _count: { id: true },
     });
-    const countMap = new Map<string, number>(
-      results.map((r: any) => [r.jobId, r._count.id]),
-    );
+    const countMap = new Map<string, number>(results.map((r: any) => [r.jobId, r._count.id]));
     return jobIds.map((id) => countMap.get(id) ?? 0);
   });
 }

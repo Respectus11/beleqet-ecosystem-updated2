@@ -199,11 +199,9 @@ describe('GraphQL Turbo (Integration)', () => {
 
   describe('POST /graphql - error handling', () => {
     it('should handle invalid queries gracefully', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/graphql')
-        .send({
-          query: `{ nonExistentField }`,
-        });
+      const response = await request(app.getHttpServer()).post('/graphql').send({
+        query: `{ nonExistentField }`,
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeDefined();

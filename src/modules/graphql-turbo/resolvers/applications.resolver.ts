@@ -1,6 +1,12 @@
 import { Resolver, Query, Args, ResolveField, Parent } from '@nestjs/graphql';
 import { PrismaService } from '@prisma-client';
-import { GqlApplication, GqlApplicationConnection, GqlApplicationFilterInput, GqlUser, GqlJob } from '../dto/graphql-types';
+import {
+  GqlApplication,
+  GqlApplicationConnection,
+  GqlApplicationFilterInput,
+  GqlUser,
+  GqlJob,
+} from '../dto/graphql-types';
 import { createJobLoader, createUserLoader } from '../loaders/dataloaders';
 
 /**
@@ -44,9 +50,7 @@ export class ApplicationsResolver {
     name: 'applications',
     description: 'Fetch applications with filters and pagination',
   })
-  async getApplications(
-    @Args('filter', { nullable: true }) filter?: GqlApplicationFilterInput,
-  ) {
+  async getApplications(@Args('filter', { nullable: true }) filter?: GqlApplicationFilterInput) {
     const page = filter?.page || 1;
     const limit = Math.min(filter?.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -93,9 +97,7 @@ export class ApplicationsResolver {
     name: 'applicationsByJob',
     description: 'Fetch all applications for a specific job',
   })
-  async getApplicationsByJob(
-    @Args('jobId') jobId: string,
-  ) {
+  async getApplicationsByJob(@Args('jobId') jobId: string) {
     return this.prisma.application.findMany({
       where: { jobId },
       orderBy: { createdAt: 'desc' },

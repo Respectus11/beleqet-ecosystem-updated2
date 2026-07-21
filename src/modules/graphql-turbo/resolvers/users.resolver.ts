@@ -62,7 +62,10 @@ export class UsersResolver {
    * @param role - Optional role filter
    * @param limit - Max users to return (default 20)
    */
-  @Query(() => [GqlUser], { name: 'gqlUsers', description: 'Fetch users with optional role filter' })
+  @Query(() => [GqlUser], {
+    name: 'gqlUsers',
+    description: 'Fetch users with optional role filter',
+  })
   async getUsers(
     @Args('role', { type: () => String, nullable: true }) role?: string,
     @Args('limit', { type: () => Int, nullable: true }) limit?: number,

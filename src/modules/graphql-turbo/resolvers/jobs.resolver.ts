@@ -44,10 +44,11 @@ export class JobsResolver {
    * }
    * ```
    */
-  @Query(() => GqlJobConnection, { name: 'jobs', description: 'Fetch jobs with filters and pagination' })
-  async getJobs(
-    @Args('filter', { nullable: true }) filter?: GqlJobFilterInput,
-  ) {
+  @Query(() => GqlJobConnection, {
+    name: 'jobs',
+    description: 'Fetch jobs with filters and pagination',
+  })
+  async getJobs(@Args('filter', { nullable: true }) filter?: GqlJobFilterInput) {
     const page = filter?.page || 1;
     const limit = Math.min(filter?.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -133,9 +134,7 @@ export class JobsResolver {
    * Query all jobs by a specific company.
    */
   @Query(() => [GqlJob], { name: 'jobsByCompany', description: 'Fetch all jobs for a company' })
-  async getJobsByCompany(
-    @Args('companyId') companyId: string,
-  ) {
+  async getJobsByCompany(@Args('companyId') companyId: string) {
     return this.prisma.job.findMany({
       where: { companyId, status: 'PUBLISHED' },
       orderBy: [{ featured: 'desc' }, { createdAt: 'desc' }],
@@ -151,9 +150,7 @@ export class JobsResolver {
    * DataLoader batches all company lookups into one DB query.
    */
   @ResolveField(() => GqlCompany, { name: 'company', nullable: true })
-  async resolveCompany(
-    @Parent() job: GqlJob,
-  ) {
+  async resolveCompany(@Parent() job: GqlJob) {
     if (!job.companyId) return null;
     const loader = createCompanyLoader(this.prisma);
     return loader.load(job.companyId);

@@ -188,7 +188,7 @@ export class EncryptedInboxService {
       // For true zero-knowledge, the client must provide serverCiphertext.
       this.logger.debug(
         `No server ciphertext provided for message in conversation ${dto.conversationId}. ` +
-        `GDPR export may not include this message until re-encrypted.`,
+          `GDPR export may not include this message until re-encrypted.`,
       );
     }
 
@@ -258,9 +258,7 @@ export class EncryptedInboxService {
     });
 
     const nextCursor =
-      messages.length === limit
-        ? String(messages[messages.length - 1].createdAt.getTime())
-        : null;
+      messages.length === limit ? String(messages[messages.length - 1].createdAt.getTime()) : null;
 
     return { messages, nextCursor };
   }
@@ -363,9 +361,7 @@ export class EncryptedInboxService {
     const conversation = await this.verifyParticipant(conversationId, userId);
 
     const otherUserId =
-      conversation.initiatorId === userId
-        ? conversation.responderId
-        : conversation.initiatorId;
+      conversation.initiatorId === userId ? conversation.responderId : conversation.initiatorId;
 
     // Fetch the other participant's basic info and message count
     const [otherUser, messageCount] = await Promise.all([
@@ -462,7 +458,10 @@ export class EncryptedInboxService {
         entityType: 'User',
         payload: {
           conversationCount: conversations.length,
-          totalMessages: conversations.reduce((sum: number, c: ConversationWithMessages) => sum + c.messages.length, 0),
+          totalMessages: conversations.reduce(
+            (sum: number, c: ConversationWithMessages) => sum + c.messages.length,
+            0,
+          ),
           timestamp: new Date().toISOString(),
         },
       },

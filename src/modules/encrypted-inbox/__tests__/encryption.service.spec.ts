@@ -136,11 +136,7 @@ describe('E2EEServerEncryptionService', () => {
     });
 
     it('should return a 64-character hex string', () => {
-      const key = service.deriveMessageKey(
-        'a'.repeat(64),
-        'b'.repeat(32),
-        'test',
-      );
+      const key = service.deriveMessageKey('a'.repeat(64), 'b'.repeat(32), 'test');
       expect(key).toHaveLength(64);
       expect(/^[0-9a-f]+$/i.test(key)).toBe(true);
     });

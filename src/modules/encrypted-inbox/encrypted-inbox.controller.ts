@@ -55,7 +55,10 @@ export class EncryptedInboxController {
    */
   @Post('keys')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register E2EE key pair', description: 'Upload public key and encrypted private key' })
+  @ApiOperation({
+    summary: 'Register E2EE key pair',
+    description: 'Upload public key and encrypted private key',
+  })
   async registerKeys(@CurrentUser() user: CurrentUserPayload, @Body() dto: RegisterKeyPairDto) {
     return this.keyExchange.registerKeyPair(user.userId, dto);
   }
@@ -67,7 +70,10 @@ export class EncryptedInboxController {
    * @param dto - New public key and encrypted private key
    */
   @Post('keys/rotate')
-  @ApiOperation({ summary: 'Rotate E2EE key pair', description: 'Replace existing key pair with new one' })
+  @ApiOperation({
+    summary: 'Rotate E2EE key pair',
+    description: 'Replace existing key pair with new one',
+  })
   async rotateKeys(@CurrentUser() user: CurrentUserPayload, @Body() dto: RegisterKeyPairDto) {
     return this.keyExchange.rotateKeyPair(user.userId, dto);
   }
@@ -78,7 +84,10 @@ export class EncryptedInboxController {
    * @param userId - Target user's UUID
    */
   @Get('keys/:userId')
-  @ApiOperation({ summary: 'Get user public key', description: 'Fetch public key for E2EE encryption' })
+  @ApiOperation({
+    summary: 'Get user public key',
+    description: 'Fetch public key for E2EE encryption',
+  })
   async getPublicKey(@Param('userId') userId: string) {
     const publicKey = await this.keyExchange.getPublicKey(userId);
     return { userId, publicKey };
@@ -88,7 +97,10 @@ export class EncryptedInboxController {
    * Check if the current user has registered an E2EE key pair.
    */
   @Get('keys/status')
-  @ApiOperation({ summary: 'Check E2EE key status', description: 'Verify if user has registered keys' })
+  @ApiOperation({
+    summary: 'Check E2EE key status',
+    description: 'Verify if user has registered keys',
+  })
   async getKeyStatus(@CurrentUser() user: CurrentUserPayload) {
     const hasKeys = await this.keyExchange.hasKeyPair(user.userId);
     return { userId: user.userId, hasKeyPair: hasKeys };
@@ -104,7 +116,10 @@ export class EncryptedInboxController {
    */
   @Post('conversations')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create encrypted conversation', description: 'Initiate E2EE conversation' })
+  @ApiOperation({
+    summary: 'Create encrypted conversation',
+    description: 'Initiate E2EE conversation',
+  })
   async createConversation(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateEncryptedConversationDto,
@@ -119,7 +134,10 @@ export class EncryptedInboxController {
    * @param query - Pagination and filter parameters
    */
   @Get('conversations')
-  @ApiOperation({ summary: 'List conversations', description: 'Get paginated encrypted conversations' })
+  @ApiOperation({
+    summary: 'List conversations',
+    description: 'Get paginated encrypted conversations',
+  })
   async listConversations(
     @CurrentUser() user: CurrentUserPayload,
     @Query() query: ListConversationsDto,
@@ -134,7 +152,10 @@ export class EncryptedInboxController {
    * @param conversationId - The conversation UUID
    */
   @Get('conversations/:conversationId')
-  @ApiOperation({ summary: 'Get conversation info', description: 'Get conversation details and participant info' })
+  @ApiOperation({
+    summary: 'Get conversation info',
+    description: 'Get conversation details and participant info',
+  })
   async getConversationInfo(
     @CurrentUser() user: CurrentUserPayload,
     @Param('conversationId') conversationId: string,
@@ -176,11 +197,11 @@ export class EncryptedInboxController {
    */
   @Post('messages')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Send encrypted message', description: 'Send E2EE message in a conversation' })
-  async sendMessage(
-    @CurrentUser() user: CurrentUserPayload,
-    @Body() dto: SendEncryptedMessageDto,
-  ) {
+  @ApiOperation({
+    summary: 'Send encrypted message',
+    description: 'Send E2EE message in a conversation',
+  })
+  async sendMessage(@CurrentUser() user: CurrentUserPayload, @Body() dto: SendEncryptedMessageDto) {
     return this.inboxService.sendMessage(user.userId, dto);
   }
 
@@ -191,11 +212,11 @@ export class EncryptedInboxController {
    * @param query - Conversation ID and pagination params
    */
   @Get('messages')
-  @ApiOperation({ summary: 'Get messages', description: 'Fetch encrypted messages with cursor pagination' })
-  async getMessages(
-    @CurrentUser() user: CurrentUserPayload,
-    @Query() query: ListMessagesDto,
-  ) {
+  @ApiOperation({
+    summary: 'Get messages',
+    description: 'Fetch encrypted messages with cursor pagination',
+  })
+  async getMessages(@CurrentUser() user: CurrentUserPayload, @Query() query: ListMessagesDto) {
     return this.inboxService.getMessages(user.userId, query);
   }
 
@@ -207,7 +228,10 @@ export class EncryptedInboxController {
    * @param dto - Optional reason for deletion
    */
   @Delete('messages/:messageId')
-  @ApiOperation({ summary: 'Delete message', description: 'Soft-delete an encrypted message (GDPR)' })
+  @ApiOperation({
+    summary: 'Delete message',
+    description: 'Soft-delete an encrypted message (GDPR)',
+  })
   async deleteMessage(
     @CurrentUser() user: CurrentUserPayload,
     @Param('messageId') messageId: string,

@@ -169,7 +169,11 @@ describe('EncryptedInboxService', () => {
     });
 
     it('should throw ForbiddenException if user is not a participant', async () => {
-      const nonParticipantConversation = { ...mockConversation, initiatorId: 'user-x', responderId: 'user-y' };
+      const nonParticipantConversation = {
+        ...mockConversation,
+        initiatorId: 'user-x',
+        responderId: 'user-y',
+      };
       prisma.encryptedConversation.findUnique.mockResolvedValue(nonParticipantConversation);
 
       await expect(
@@ -209,12 +213,16 @@ describe('EncryptedInboxService', () => {
     });
 
     it('should throw ForbiddenException if user is not a participant', async () => {
-      const nonParticipantConversation = { ...mockConversation, initiatorId: 'user-x', responderId: 'user-y' };
+      const nonParticipantConversation = {
+        ...mockConversation,
+        initiatorId: 'user-x',
+        responderId: 'user-y',
+      };
       prisma.encryptedConversation.findUnique.mockResolvedValue(nonParticipantConversation);
 
-      await expect(
-        service.getMessages('user-1', { conversationId: 'conv-1' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getMessages('user-1', { conversationId: 'conv-1' })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -237,18 +245,16 @@ describe('EncryptedInboxService', () => {
     it('should throw NotFoundException if message not found', async () => {
       prisma.encryptedMessage.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.deleteMessage('user-1', 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.deleteMessage('user-1', 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException if not the sender', async () => {
       const otherSenderMessage = { ...mockMessage, senderId: 'user-2' };
       prisma.encryptedMessage.findUnique.mockResolvedValue(otherSenderMessage);
 
-      await expect(
-        service.deleteMessage('user-1', 'msg-1'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.deleteMessage('user-1', 'msg-1')).rejects.toThrow(ForbiddenException);
     });
   });
 

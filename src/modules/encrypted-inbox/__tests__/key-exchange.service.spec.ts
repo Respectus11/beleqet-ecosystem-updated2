@@ -31,10 +31,7 @@ describe('KeyExchangeService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        KeyExchangeService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [KeyExchangeService, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     service = module.get(KeyExchangeService);
@@ -100,9 +97,7 @@ describe('KeyExchangeService', () => {
     it('should throw NotFoundException if no key pair exists', async () => {
       (prisma.e2EKeyPair.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.getPublicKey('user-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getPublicKey('user-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -119,9 +114,7 @@ describe('KeyExchangeService', () => {
     it('should throw NotFoundException if no key pair exists', async () => {
       (prisma.e2EKeyPair.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.getEncryptedPrivateKey('user-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getEncryptedPrivateKey('user-1')).rejects.toThrow(NotFoundException);
     });
   });
 

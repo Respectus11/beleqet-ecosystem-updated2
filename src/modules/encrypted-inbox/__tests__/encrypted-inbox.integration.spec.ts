@@ -54,8 +54,9 @@ describe('Encrypted Inbox (Integration)', () => {
 
   describe('GET /api/v1/encrypted-inbox/conversations', () => {
     it('should require authentication', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/encrypted-inbox/conversations');
+      const response = await request(app.getHttpServer()).get(
+        '/api/v1/encrypted-inbox/conversations',
+      );
 
       expect(response.status).toBe(401);
     });
@@ -77,8 +78,9 @@ describe('Encrypted Inbox (Integration)', () => {
 
   describe('GET /api/v1/encrypted-inbox/gdpr/export', () => {
     it('should require authentication', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/encrypted-inbox/gdpr/export');
+      const response = await request(app.getHttpServer()).get(
+        '/api/v1/encrypted-inbox/gdpr/export',
+      );
 
       expect(response.status).toBe(401);
     });
@@ -86,8 +88,9 @@ describe('Encrypted Inbox (Integration)', () => {
 
   describe('DELETE /api/v1/encrypted-inbox/gdpr/delete', () => {
     it('should require authentication', async () => {
-      const response = await request(app.getHttpServer())
-        .delete('/api/v1/encrypted-inbox/gdpr/delete');
+      const response = await request(app.getHttpServer()).delete(
+        '/api/v1/encrypted-inbox/gdpr/delete',
+      );
 
       expect(response.status).toBe(401);
     });

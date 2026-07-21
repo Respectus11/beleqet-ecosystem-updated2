@@ -44,10 +44,7 @@ describe('JobsResolver', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        JobsResolver,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [JobsResolver, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     resolver = module.get(JobsResolver);
@@ -152,9 +149,7 @@ describe('JobsResolver', () => {
 
   describe('resolveApplicationCount', () => {
     it('should resolve application count via DataLoader', async () => {
-      prisma.application.groupBy.mockResolvedValue([
-        { jobId: 'job-1', _count: { id: 15 } },
-      ]);
+      prisma.application.groupBy.mockResolvedValue([{ jobId: 'job-1', _count: { id: 15 } }]);
 
       const result = await resolver.resolveApplicationCount(mockJob as any);
       expect(result).toBe(15);

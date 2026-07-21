@@ -55,8 +55,7 @@ export class EncryptedInboxGateway implements OnGatewayConnection, OnGatewayDisc
    */
   async handleConnection(client: Socket) {
     try {
-      const tokenString =
-        client.handshake.auth?.token || client.handshake.headers?.authorization;
+      const tokenString = client.handshake.auth?.token || client.handshake.headers?.authorization;
       if (!tokenString) throw new Error('No token provided');
 
       const token = tokenString.replace('Bearer ', '').trim();
@@ -67,9 +66,7 @@ export class EncryptedInboxGateway implements OnGatewayConnection, OnGatewayDisc
         `[EncryptedInboxGateway] Client connected: ${client.id} (User: ${payload.userId})`,
       );
     } catch {
-      this.logger.warn(
-        `[EncryptedInboxGateway] Unauthorized connection attempt: ${client.id}`,
-      );
+      this.logger.warn(`[EncryptedInboxGateway] Unauthorized connection attempt: ${client.id}`);
       client.emit('error', { message: 'Unauthorized' });
       client.disconnect();
     }
