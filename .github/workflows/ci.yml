@@ -247,7 +247,7 @@ jobs:
           cache: npm
           cache-dependency-path: beleqet-jobs-nextjs/package-lock.json
 
-      - run: npm ci
+      - run: npm install --legacy-peer-deps
       - run: npm run lint
       - name: TypeScript validation
         run: npx tsc --noEmit
