@@ -6,7 +6,6 @@ import {
   GqlJobCategory,
   GqlJobFilterInput,
   GqlJobConnection,
-  GqlJobStatus,
 } from '../dto/graphql-types';
 import {
   createCompanyLoader,

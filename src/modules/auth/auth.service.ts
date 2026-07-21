@@ -24,7 +24,6 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 
-
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
