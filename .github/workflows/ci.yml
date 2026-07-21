@@ -179,11 +179,13 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - run: npm ci
+      - run: npm install --legacy-peer-deps
       - name: Create synthetic test environment
         run: bash scripts/ci/create-test-env.sh .env
       - run: npm run prisma:generate
       - name: Apply database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beleqet_test
         run: npm run prisma:migrate:deploy
       - run: npm run build
 
@@ -294,11 +296,13 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - run: npm ci
+      - run: npm install --legacy-peer-deps
       - name: Create synthetic test environment
         run: bash scripts/ci/create-test-env.sh .env
       - run: npm run prisma:generate
       - name: Apply database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beleqet_test
         run: npm run prisma:migrate:deploy
       - run: npm run build
 
