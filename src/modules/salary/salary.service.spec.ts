@@ -55,7 +55,7 @@ describe('SalaryService', () => {
     }).compile();
 
     service = module.get<SalaryService>(SalaryService);
-    prismaService = module.get<PrismaService>(PrismaService);
+    _prismaService = module.get<PrismaService>(PrismaService);
 
     // Clear all mocks before each test
     jest.clearAllMocks();

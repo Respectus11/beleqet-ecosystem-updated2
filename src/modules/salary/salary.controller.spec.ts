@@ -28,7 +28,7 @@ describe('SalaryController', () => {
     }).compile();
 
     controller = module.get<SalaryController>(SalaryController);
-    service = module.get<SalaryService>(SalaryService);
+    _service = module.get<SalaryService>(SalaryService);
 
     jest.clearAllMocks();
   });
