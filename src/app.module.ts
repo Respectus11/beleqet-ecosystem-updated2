@@ -41,6 +41,7 @@ import { KycModule } from './modules/kyc/kyc.module';
 import { AiFeedModule } from './modules/ai-feed/ai-feed.module';
 import { ResumeBrainModule } from './modules/resume-brain/resume-brain.module';
 import { TaxCalculatorModule } from './modules/tax-calculator/tax-calculator.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -130,6 +131,7 @@ import { TaxCalculatorModule } from './modules/tax-calculator/tax-calculator.mod
     AiFeedModule,
     ResumeBrainModule,
     TaxCalculatorModule,
+    HealthModule,
   ],
   providers: [
     {
@@ -138,4 +140,4 @@ import { TaxCalculatorModule } from './modules/tax-calculator/tax-calculator.mod
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}
