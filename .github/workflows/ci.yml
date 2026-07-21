@@ -72,7 +72,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - run: npm ci
+      - run: npm install --legacy-peer-deps
       - run: npm run prisma:generate
       - name: ESLint (non-mutating)
         run: npm run lint
