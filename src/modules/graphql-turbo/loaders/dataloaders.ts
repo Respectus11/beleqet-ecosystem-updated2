@@ -16,7 +16,9 @@ export function createCompanyLoader(prisma: PrismaService) {
       where: { id: { in: [...companyIds] } },
     });
     const companyMap = new Map(companies.map((c: any) => [c.id, c]));
-    return companyIds.map((id: string) => companyMap.get(id) ?? new Error(`Company ${id} not found`));
+    return companyIds.map(
+      (id: string) => companyMap.get(id) ?? new Error(`Company ${id} not found`),
+    );
   });
 }
 
@@ -34,7 +36,9 @@ export function createCategoryLoader(prisma: PrismaService) {
       where: { id: { in: [...categoryIds] } },
     });
     const categoryMap = new Map(categories.map((c: any) => [c.id, c]));
-    return categoryIds.map((id: string) => categoryMap.get(id) ?? new Error(`Category ${id} not found`));
+    return categoryIds.map(
+      (id: string) => categoryMap.get(id) ?? new Error(`Category ${id} not found`),
+    );
   });
 }
 
