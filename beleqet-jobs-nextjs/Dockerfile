@@ -38,11 +38,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# node:20-alpine's bundled npm (10.8.2) ships tar@6.2.1 (CVE-2026-59873,
-# CRITICAL). npm itself is still needed at runtime — CMD runs `npm run start`
-# in this exact image — so it can't just be removed. npm@11 bundles a patched
-# tar (7.5.19+) and still supports Node 20 (engines: ^20.17.0 || >=22.9.0).
-RUN npm install -g npm@11
+# Strip base-image npm/corepack — runtime starts Next via `node`, and the
+# bundled `tar` (CVE-2026-59873) fails the Trivy CRITICAL image gate.
+RUN rm -rf \
+  /usr/local/lib/node_modules/npm \
+  /usr/local/lib/node_modules/corepack \
+  /usr/local/bin/npm \
+  /usr/local/bin/npx \
+  /usr/local/bin/corepack \
+  /opt/yarn-v*
 
 COPY --from=pruner --chown=node:node /app/package.json /app/package-lock.json ./
 COPY --from=pruner --chown=node:node /app/node_modules ./node_modules
@@ -57,4 +61,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD wget -qO- http://127.0.0.1:3001/ || exit 1
 
-CMD ["npm", "run", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]
