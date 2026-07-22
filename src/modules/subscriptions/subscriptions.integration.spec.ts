@@ -247,6 +247,49 @@ describe('Subscription checkout -> webhook -> active flow (integration)', () => 
     expect(afterFirst?.currentPeriodEnd).toEqual(afterSecond?.currentPeriodEnd);
   });
 
+  it('does not revoke access when PayPal confirms the cancellation the user already requested', async () => {
+    (paypal.billingAgreement.create as jest.Mock).mockImplementation((_attrs, cb) => {
+      cb(null, {
+        id: 'I-AGREEMENT-3',
+        state: 'Pending',
+        links: [{ rel: 'approval_url', href: 'https://paypal.example/approve' }],
+      });
+    });
+    (paypal.billingAgreement.cancel as jest.Mock).mockImplementation((_id, _opts, cb) => cb(null));
+
+    await checkoutService.checkout('user-4', { planId: 'plan-pro' });
+    const paypalService = moduleRef.get(PaypalService);
+    await (paypalService as any).processWebhookEvent({
+      id: 'webhook-evt-3',
+      event_type: 'BILLING.SUBSCRIPTION.ACTIVATED',
+      resource_type: 'agreement',
+      summary: 'Agreement activated',
+      resource: { id: 'I-AGREEMENT-3' },
+      create_time: new Date().toISOString(),
+    });
+
+    const activeSubscription = await subscriptionsService.findMine('user-4');
+    expect(activeSubscription?.status).toBe('ACTIVE');
+
+    // User cancels: this sets cancelAtPeriodEnd and tells PayPal to stop
+    // future charges — which, in production, triggers PayPal's own
+    // BILLING.SUBSCRIPTION.CANCELLED webhook straight away.
+    await checkoutService.cancel(activeSubscription!.id, 'user-4');
+
+    await (paypalService as any).processWebhookEvent({
+      id: 'webhook-evt-4',
+      event_type: 'BILLING.SUBSCRIPTION.CANCELLED',
+      resource_type: 'agreement',
+      summary: 'Agreement cancelled',
+      resource: { id: 'I-AGREEMENT-3' },
+      create_time: new Date().toISOString(),
+    });
+
+    const afterGatewayCancel = await subscriptionsService.findMine('user-4');
+    expect(afterGatewayCancel?.status).toBe('ACTIVE');
+    expect(afterGatewayCancel?.cancelAtPeriodEnd).toBe(true);
+  });
+
   it('the daily sweep expires an ACTIVE subscription whose period has ended', async () => {
     await prisma.subscription.create({
       data: {

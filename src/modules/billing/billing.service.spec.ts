@@ -68,28 +68,44 @@ describe('BillingService', () => {
       providerSubscriptionId: 'I-AGREEMENT',
     };
 
+    const rawBody = Buffer.from(JSON.stringify(dto));
+
     it('rejects a missing/invalid signature when a secret is configured', async () => {
       await buildModule(secret);
-      await expect(service.handleGenericWebhook(dto, 'not-the-right-signature')).rejects.toThrow(
-        UnprocessableEntityException,
-      );
+      await expect(
+        service.handleGenericWebhook(dto, rawBody, 'not-the-right-signature'),
+      ).rejects.toThrow(UnprocessableEntityException);
       expect(subscriptionsService.syncFromProviderEvent).not.toHaveBeenCalled();
     });
 
     it('accepts a valid HMAC signature and syncs the subscription', async () => {
       await buildModule(secret);
-      const signature = createHmac('sha256', secret).update(JSON.stringify(dto)).digest('hex');
+      const signature = createHmac('sha256', secret).update(rawBody).digest('hex');
 
-      await service.handleGenericWebhook(dto, signature);
+      await service.handleGenericWebhook(dto, rawBody, signature);
 
       expect(subscriptionsService.syncFromProviderEvent).toHaveBeenCalledWith(
         expect.objectContaining({ gatewayEventId: 'evt-1', providerSubscriptionId: 'I-AGREEMENT' }),
       );
     });
 
+    it('accepts a signature computed over raw bytes that reformat the same JSON (proves it no longer re-serializes the parsed DTO)', async () => {
+      await buildModule(secret);
+      const differentlyFormattedRawBody = Buffer.from(
+        `{\n  "gatewayEventId":   "evt-1",\n  "provider": "PAYPAL",\n  "eventType": "ACTIVATED",\n  "providerSubscriptionId": "I-AGREEMENT"\n}`,
+      );
+      const signature = createHmac('sha256', secret)
+        .update(differentlyFormattedRawBody)
+        .digest('hex');
+
+      await service.handleGenericWebhook(dto, differentlyFormattedRawBody, signature);
+
+      expect(subscriptionsService.syncFromProviderEvent).toHaveBeenCalled();
+    });
+
     it('skips verification (with a warning) when no secret is configured', async () => {
       await buildModule('');
-      await service.handleGenericWebhook(dto, undefined);
+      await service.handleGenericWebhook(dto, rawBody, undefined);
       expect(subscriptionsService.syncFromProviderEvent).toHaveBeenCalled();
     });
   });

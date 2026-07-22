@@ -48,9 +48,10 @@ export class BillingService {
 
   async handleGenericWebhook(
     dto: GenericBillingWebhookDto,
+    rawBody: Buffer,
     signature: string | undefined,
   ): Promise<void> {
-    this.verifySignature(dto, signature);
+    this.verifySignature(rawBody, signature);
 
     await this.subscriptionsService.syncFromProviderEvent({
       gatewayEventId: dto.gatewayEventId,
@@ -64,7 +65,14 @@ export class BillingService {
     });
   }
 
-  private verifySignature(dto: GenericBillingWebhookDto, signature: string | undefined): void {
+  /**
+   * Verifies against the exact raw request bytes (see BillingController),
+   * never a re-serialization of the parsed DTO — JSON.stringify(dto) is not
+   * guaranteed to reproduce the sender's original byte sequence (key order,
+   * whitespace, fields class-validator strips), which would reject
+   * genuinely valid webhooks.
+   */
+  private verifySignature(rawBody: Buffer, signature: string | undefined): void {
     if (!this.webhookSecret) {
       this.logger.warn(
         'BILLING_WEBHOOK_SECRET not set — skipping signature verification (unsafe for production)',
@@ -72,9 +80,7 @@ export class BillingService {
       return;
     }
 
-    const expected = createHmac('sha256', this.webhookSecret)
-      .update(JSON.stringify(dto))
-      .digest('hex');
+    const expected = createHmac('sha256', this.webhookSecret).update(rawBody).digest('hex');
     const expectedBuf = Buffer.from(expected);
     const providedBuf = Buffer.from(signature ?? '');
 

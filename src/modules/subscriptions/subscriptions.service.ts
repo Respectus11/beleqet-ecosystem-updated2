@@ -176,13 +176,15 @@ export class SubscriptionsService {
     }
 
     const now = new Date();
-    const statusUpdate = this.resolveStatusUpdate(input.eventType, subscription.plan.interval, now);
+    const statusUpdate = this.resolveStatusUpdate(input.eventType, subscription, now);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.subscription.update({
-        where: { id: subscription.id },
-        data: statusUpdate,
-      });
+      if (statusUpdate) {
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: statusUpdate,
+        });
+      }
 
       if (input.amount !== undefined && input.currency) {
         await tx.subscriptionTransaction.create({
@@ -225,21 +227,28 @@ export class SubscriptionsService {
 
   private resolveStatusUpdate(
     eventType: SubscriptionLifecycleEvent,
-    interval: BillingInterval,
+    subscription: { plan: { interval: BillingInterval }; cancelAtPeriodEnd: boolean },
     now: Date,
-  ): Prisma.SubscriptionUpdateInput {
+  ): Prisma.SubscriptionUpdateInput | null {
     switch (eventType) {
       case 'ACTIVATED':
       case 'RENEWED':
         return {
           status: SubscriptionStatus.ACTIVE,
           currentPeriodStart: now,
-          currentPeriodEnd: addInterval(now, interval),
+          currentPeriodEnd: addInterval(now, subscription.plan.interval),
           reminderSentAt: null,
         };
       case 'PAYMENT_FAILED':
         return { status: SubscriptionStatus.PAST_DUE };
       case 'CANCELLED':
+        // A user-initiated cancel (SubscriptionsCheckoutService.cancel) sets
+        // cancelAtPeriodEnd before telling the gateway to stop future
+        // charges — that call alone fires this same CANCELLED webhook, so
+        // treating it as an immediate revocation here would cut off access
+        // the user already paid for. Leave status untouched; sweepExpired
+        // flips it to CANCELLED once currentPeriodEnd actually passes.
+        if (subscription.cancelAtPeriodEnd) return null;
         return { status: SubscriptionStatus.CANCELLED };
       case 'EXPIRED':
         return { status: SubscriptionStatus.EXPIRED };
@@ -260,29 +269,42 @@ export class SubscriptionsService {
   }
 
   /**
-   * Daily cron sweep (called by SchedulerService): flips every ACTIVE
-   * subscription whose period has ended into EXPIRED. This is the safety
+   * Daily cron sweep (called by SchedulerService): resolves every ACTIVE
+   * subscription whose period has ended. Subscriptions the user already
+   * cancelled (cancelAtPeriodEnd) become CANCELLED — access was always
+   * scheduled to stop here. Everything else becomes EXPIRED — the safety
    * net for subscriptions that never received a matching gateway webhook
    * (e.g. the payer never approved a renewal at all).
    *
-   * @returns the subscriptions that were just marked EXPIRED, for notification.
+   * @returns the subscriptions that were just resolved, for notification.
    */
   async sweepExpired(
     now = new Date(),
   ): Promise<Array<{ id: string; userId: string; planName: string }>> {
-    const expired = await this.prisma.subscription.findMany({
+    const due = await this.prisma.subscription.findMany({
       where: { status: SubscriptionStatus.ACTIVE, currentPeriodEnd: { lt: now } },
-      select: { id: true, userId: true, plan: { select: { name: true } } },
+      select: { id: true, userId: true, cancelAtPeriodEnd: true, plan: { select: { name: true } } },
     });
 
-    if (expired.length === 0) return [];
+    if (due.length === 0) return [];
 
-    await this.prisma.subscription.updateMany({
-      where: { id: { in: expired.map((s) => s.id) } },
-      data: { status: SubscriptionStatus.EXPIRED },
-    });
+    const cancelledIds = due.filter((s) => s.cancelAtPeriodEnd).map((s) => s.id);
+    const lapsedIds = due.filter((s) => !s.cancelAtPeriodEnd).map((s) => s.id);
 
-    return expired.map((s) => ({ id: s.id, userId: s.userId, planName: s.plan.name }));
+    if (cancelledIds.length > 0) {
+      await this.prisma.subscription.updateMany({
+        where: { id: { in: cancelledIds } },
+        data: { status: SubscriptionStatus.CANCELLED },
+      });
+    }
+    if (lapsedIds.length > 0) {
+      await this.prisma.subscription.updateMany({
+        where: { id: { in: lapsedIds } },
+        data: { status: SubscriptionStatus.EXPIRED },
+      });
+    }
+
+    return due.map((s) => ({ id: s.id, userId: s.userId, planName: s.plan.name }));
   }
 
   /**

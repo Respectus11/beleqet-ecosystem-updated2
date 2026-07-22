@@ -204,12 +204,40 @@ describe('SubscriptionsService', () => {
       );
       expect(prisma.subscriptionTransaction.create).not.toHaveBeenCalled();
     });
+
+    it('marks the subscription CANCELLED on a CANCELLED event when the user never scheduled a cancel-at-period-end', async () => {
+      prisma.webhookEvent.create.mockResolvedValue({});
+      prisma.subscription.findUnique.mockResolvedValue({
+        id: 'sub1',
+        cancelAtPeriodEnd: false,
+        plan: { interval: 'MONTHLY' },
+      });
+
+      await service.syncFromProviderEvent({ ...baseInput, eventType: 'CANCELLED' });
+
+      expect(prisma.subscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: SubscriptionStatus.CANCELLED } }),
+      );
+    });
+
+    it('does NOT revoke access on a CANCELLED event when the user already scheduled cancel-at-period-end', async () => {
+      prisma.webhookEvent.create.mockResolvedValue({});
+      prisma.subscription.findUnique.mockResolvedValue({
+        id: 'sub1',
+        cancelAtPeriodEnd: true,
+        plan: { interval: 'MONTHLY' },
+      });
+
+      await service.syncFromProviderEvent({ ...baseInput, eventType: 'CANCELLED' });
+
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('sweepExpired', () => {
     it('marks overdue ACTIVE subscriptions EXPIRED and returns them for notification', async () => {
       prisma.subscription.findMany.mockResolvedValue([
-        { id: 'sub1', userId: 'user1', plan: { name: 'Pro' } },
+        { id: 'sub1', userId: 'user1', cancelAtPeriodEnd: false, plan: { name: 'Pro' } },
       ]);
       prisma.subscription.updateMany.mockResolvedValue({ count: 1 });
 
@@ -220,6 +248,44 @@ describe('SubscriptionsService', () => {
         data: { status: SubscriptionStatus.EXPIRED },
       });
       expect(result).toEqual([{ id: 'sub1', userId: 'user1', planName: 'Pro' }]);
+    });
+
+    it('marks an overdue subscription CANCELLED instead of EXPIRED when the user already scheduled cancel-at-period-end', async () => {
+      prisma.subscription.findMany.mockResolvedValue([
+        { id: 'sub1', userId: 'user1', cancelAtPeriodEnd: true, plan: { name: 'Pro' } },
+      ]);
+      prisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.sweepExpired(new Date('2026-07-21'));
+
+      expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['sub1'] } },
+        data: { status: SubscriptionStatus.CANCELLED },
+      });
+      expect(prisma.subscription.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('splits a mixed batch into one CANCELLED update and one EXPIRED update', async () => {
+      prisma.subscription.findMany.mockResolvedValue([
+        { id: 'sub1', userId: 'user1', cancelAtPeriodEnd: true, plan: { name: 'Pro' } },
+        { id: 'sub2', userId: 'user2', cancelAtPeriodEnd: false, plan: { name: 'Enterprise' } },
+      ]);
+      prisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.sweepExpired(new Date('2026-07-21'));
+
+      expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['sub1'] } },
+        data: { status: SubscriptionStatus.CANCELLED },
+      });
+      expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['sub2'] } },
+        data: { status: SubscriptionStatus.EXPIRED },
+      });
+      expect(result).toEqual([
+        { id: 'sub1', userId: 'user1', planName: 'Pro' },
+        { id: 'sub2', userId: 'user2', planName: 'Enterprise' },
+      ]);
     });
 
     it('is a no-op when nothing is overdue', async () => {

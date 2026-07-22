@@ -2,8 +2,9 @@
  * @file billing.controller.ts
  * @description Gateway-agnostic webhook receiver for the Subscription Manager.
  */
-import { Body, Controller, Headers, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
 import { BillingService } from './billing.service';
 import { GenericBillingWebhookDto } from './dto/generic-billing-webhook.dto';
 
@@ -16,8 +17,10 @@ export class BillingController {
    * POST /billing/webhook
    *
    * Public (no JWT) — verified via HMAC-SHA256 signature against
-   * BILLING_WEBHOOK_SECRET. PayPal/Stripe deliver to their own existing
-   * endpoints instead (see billing.service.ts header comment).
+   * BILLING_WEBHOOK_SECRET, computed over the raw request body (see
+   * `rawBody: true` in main.ts) rather than the parsed DTO. PayPal/Stripe
+   * deliver to their own existing endpoints instead (see billing.service.ts
+   * header comment).
    */
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
@@ -30,9 +33,11 @@ export class BillingController {
   @ApiResponse({ status: 200, description: 'Webhook processed (idempotent)' })
   @ApiResponse({ status: 422, description: 'Signature verification failed' })
   handleWebhook(
+    @Req() req: Request & { rawBody?: Buffer },
     @Body() dto: GenericBillingWebhookDto,
     @Headers('x-billing-signature') signature: string,
   ) {
-    return this.billingService.handleGenericWebhook(dto, signature);
+    const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body));
+    return this.billingService.handleGenericWebhook(dto, rawBody, signature);
   }
 }
