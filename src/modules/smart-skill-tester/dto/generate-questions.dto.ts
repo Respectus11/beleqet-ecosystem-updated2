@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEnum, IsNotEmpty, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export enum SkillLevel {
   ENTRY = 'ENTRY',
@@ -37,11 +37,4 @@ export class GenerateQuestionsDto {
   })
   @IsEnum(SkillLevel)
   skillLevel!: SkillLevel;
-
-  @ApiProperty({
-    description: 'UUID of the candidate taking the assessment',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
-  @IsUUID()
-  userId!: string;
 }

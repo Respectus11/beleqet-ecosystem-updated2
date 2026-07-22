@@ -9,11 +9,14 @@ import {
   Post,
   UnprocessableEntityException,
   UseFilters,
+  UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ValidationError } from 'class-validator';
 import { I18nService } from 'nestjs-i18n';
+import { CurrentUser, CurrentUserPayload } from '../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { GenerateQuestionsDto } from './dto/generate-questions.dto';
 import { SubmitAnswersDto } from './dto/submit-answers.dto';
 import { GenerateQuestionsResult, SubmitAnswersResult } from './interfaces/skill-tester.interfaces';
@@ -50,6 +53,8 @@ function flattenValidationMessages(errors: ValidationError[], parentPath = ''): 
 }
 
 @ApiTags('skill-tester')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @UseFilters(SkillTesterInvalidPayloadFilter)
 @Controller('skill-tester')
 export class SmartSkillTesterController {
@@ -68,14 +73,19 @@ export class SmartSkillTesterController {
     description: 'Invalid generate-questions payload',
   })
   @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid JWT',
+  })
+  @ApiResponse({
     status: 422,
     description: 'AI failed to produce a valid question set',
   })
   async generate(
+    @CurrentUser() user: CurrentUserPayload,
     @Body(skillTesterValidationPipe) dto: GenerateQuestionsDto,
   ): Promise<GenerateQuestionsResult> {
     try {
-      return await this.smartSkillTesterService.generateSession(dto);
+      return await this.smartSkillTesterService.generateSession(user.userId, dto);
     } catch (error) {
       throw await this.mapRouteError(error);
     }
@@ -90,11 +100,16 @@ export class SmartSkillTesterController {
     status: 400,
     description: 'Invalid submit-answers payload',
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid JWT',
+  })
   async submit(
+    @CurrentUser() user: CurrentUserPayload,
     @Body(skillTesterValidationPipe) dto: SubmitAnswersDto,
   ): Promise<SubmitAnswersResult> {
     try {
-      return await this.smartSkillTesterService.submitAnswers(dto);
+      return await this.smartSkillTesterService.submitAnswers(user.userId, dto);
     } catch (error) {
       throw await this.mapRouteError(error);
     }
