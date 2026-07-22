@@ -118,7 +118,23 @@ describe('SubscriptionsService', () => {
       await expect(service.cancel('sub1', 'user1')).rejects.toThrow(NotFoundException);
     });
 
-    it('throws BadRequestException when the subscription is not ACTIVE', async () => {
+    it('sets cancelAtPeriodEnd on a PAST_DUE subscription owned by the caller', async () => {
+      prisma.subscription.findUnique.mockResolvedValue({
+        id: 'sub1',
+        userId: 'user1',
+        status: SubscriptionStatus.PAST_DUE,
+      });
+      prisma.subscription.update.mockResolvedValue({ id: 'sub1', cancelAtPeriodEnd: true });
+
+      await service.cancel('sub1', 'user1');
+
+      expect(prisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub1' },
+        data: { cancelAtPeriodEnd: true },
+      });
+    });
+
+    it('throws BadRequestException when the subscription is neither ACTIVE nor PAST_DUE', async () => {
       prisma.subscription.findUnique.mockResolvedValue({
         id: 'sub1',
         userId: 'user1',
@@ -243,10 +259,35 @@ describe('SubscriptionsService', () => {
 
       const result = await service.sweepExpired(new Date('2026-07-21'));
 
+      expect(prisma.subscription.findMany).toHaveBeenCalledWith({
+        where: {
+          status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE] },
+          currentPeriodEnd: { lt: new Date('2026-07-21') },
+        },
+        select: expect.any(Object),
+      });
       expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
         where: { id: { in: ['sub1'] } },
         data: { status: SubscriptionStatus.EXPIRED },
       });
+      expect(result).toEqual([{ id: 'sub1', userId: 'user1', planName: 'Pro' }]);
+    });
+
+    it('also sweeps overdue PAST_DUE subscriptions, not just ACTIVE ones', async () => {
+      prisma.subscription.findMany.mockResolvedValue([
+        { id: 'sub1', userId: 'user1', cancelAtPeriodEnd: false, plan: { name: 'Pro' } },
+      ]);
+      prisma.subscription.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.sweepExpired(new Date('2026-07-21'));
+
+      expect(prisma.subscription.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE] },
+          }),
+        }),
+      );
       expect(result).toEqual([{ id: 'sub1', userId: 'user1', planName: 'Pro' }]);
     });
 

@@ -107,5 +107,21 @@ describe('SubscriptionsCheckoutService', () => {
       await expect(service.cancel('sub1', 'user1')).rejects.toThrow(NotFoundException);
       expect(paypalService.cancelSubscription).not.toHaveBeenCalled();
     });
+
+    it("cancels a PAST_DUE subscription instead of surfacing subscriptionsService.cancel's ACTIVE-only rejection", async () => {
+      prisma.subscription.findUnique.mockResolvedValue({
+        id: 'sub1',
+        userId: 'user1',
+        provider: PaymentProvider.PAYPAL,
+        providerSubscriptionId: 'I-AGREEMENT',
+        status: 'PAST_DUE',
+      });
+      subscriptionsService.cancel.mockResolvedValue({ id: 'sub1', cancelAtPeriodEnd: true });
+
+      await service.cancel('sub1', 'user1');
+
+      expect(paypalService.cancelSubscription).toHaveBeenCalledWith('I-AGREEMENT');
+      expect(subscriptionsService.cancel).toHaveBeenCalledWith('sub1', 'user1');
+    });
   });
 });

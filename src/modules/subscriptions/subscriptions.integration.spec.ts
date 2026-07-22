@@ -77,7 +77,11 @@ function createFakePrisma() {
     }),
     findMany: jest.fn(async ({ where }: any) => {
       return [...subscriptions.values()]
-        .filter((s) => (where?.status ? s.status === where.status : true))
+        .filter((s) => {
+          if (!where?.status) return true;
+          const statuses = where.status.in ?? [where.status];
+          return statuses.includes(s.status);
+        })
         .filter((s) =>
           where?.currentPeriodEnd?.lt ? s.currentPeriodEnd < where.currentPeriodEnd.lt : true,
         )
@@ -305,5 +309,32 @@ describe('Subscription checkout -> webhook -> active flow (integration)', () => 
 
     expect(expired).toHaveLength(1);
     expect(expired[0].planName).toBe('Pro');
+  });
+
+  it('the daily sweep also resolves a PAST_DUE subscription stuck past its period end, and lets it be cancelled', async () => {
+    const pastDue = await prisma.subscription.create({
+      data: {
+        userId: 'user-5',
+        planId: 'plan-pro',
+        status: 'PAST_DUE',
+        provider: 'PAYPAL',
+        providerSubscriptionId: 'I-AGREEMENT-5',
+        currentPeriodStart: new Date('2026-06-01'),
+        currentPeriodEnd: new Date('2026-06-30'),
+      },
+    });
+
+    // Previously, cancel() rejected anything but ACTIVE, trapping the user.
+    await expect(checkoutService.cancel(pastDue.id, 'user-5')).resolves.toMatchObject({
+      cancelAtPeriodEnd: true,
+    });
+
+    // Previously, sweepExpired only queried ACTIVE, so a PAST_DUE
+    // subscription past its period end would never be resolved.
+    const resolved = await subscriptionsService.sweepExpired(new Date('2026-07-21'));
+
+    expect(resolved.map((s) => s.id)).toContain(pastDue.id);
+    const afterSweep = await prisma.subscription.findUnique({ where: { id: pastDue.id } });
+    expect(afterSweep?.status).toBe('CANCELLED');
   });
 });

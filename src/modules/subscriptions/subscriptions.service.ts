@@ -135,15 +135,20 @@ export class SubscriptionsService {
    * User-initiated cancellation. Sets `cancelAtPeriodEnd` so access continues
    * until the paid-for period ends, rather than revoking immediately — the
    * gateway-side agreement is cancelled by the caller (SubscriptionsController)
-   * before this is called.
+   * before this is called. PAST_DUE is cancellable too: a failed renewal
+   * charge shouldn't trap the user into being unable to leave — sweepExpired
+   * still resolves it to CANCELLED (rather than EXPIRED) once its period ends.
    */
   async cancel(id: string, userId: string) {
     const subscription = await this.prisma.subscription.findUnique({ where: { id } });
     if (!subscription || subscription.userId !== userId) {
       throw new NotFoundException('Subscription not found');
     }
-    if (subscription.status !== SubscriptionStatus.ACTIVE) {
-      throw new BadRequestException('Only an active subscription can be cancelled');
+    if (
+      subscription.status !== SubscriptionStatus.ACTIVE &&
+      subscription.status !== SubscriptionStatus.PAST_DUE
+    ) {
+      throw new BadRequestException('Only an active or past-due subscription can be cancelled');
     }
     return this.prisma.subscription.update({
       where: { id },
@@ -269,12 +274,15 @@ export class SubscriptionsService {
   }
 
   /**
-   * Daily cron sweep (called by SchedulerService): resolves every ACTIVE
-   * subscription whose period has ended. Subscriptions the user already
-   * cancelled (cancelAtPeriodEnd) become CANCELLED — access was always
-   * scheduled to stop here. Everything else becomes EXPIRED — the safety
-   * net for subscriptions that never received a matching gateway webhook
-   * (e.g. the payer never approved a renewal at all).
+   * Daily cron sweep (called by SchedulerService): resolves every ACTIVE or
+   * PAST_DUE subscription whose period has ended. PAST_DUE is included
+   * alongside ACTIVE because a failed renewal charge leaves currentPeriodEnd
+   * in the past immediately — without it, PAST_DUE subscriptions would never
+   * be picked up again and stay in limbo forever. Subscriptions the user
+   * already cancelled (cancelAtPeriodEnd) become CANCELLED — access was
+   * always scheduled to stop here. Everything else becomes EXPIRED — the
+   * safety net for subscriptions that never received a matching gateway
+   * webhook (e.g. the payer never approved a renewal at all).
    *
    * @returns the subscriptions that were just resolved, for notification.
    */
@@ -282,7 +290,10 @@ export class SubscriptionsService {
     now = new Date(),
   ): Promise<Array<{ id: string; userId: string; planName: string }>> {
     const due = await this.prisma.subscription.findMany({
-      where: { status: SubscriptionStatus.ACTIVE, currentPeriodEnd: { lt: now } },
+      where: {
+        status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE] },
+        currentPeriodEnd: { lt: now },
+      },
       select: { id: true, userId: true, cancelAtPeriodEnd: true, plan: { select: { name: true } } },
     });
 
