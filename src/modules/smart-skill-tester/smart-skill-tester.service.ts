@@ -413,11 +413,13 @@ export class SmartSkillTesterService {
     );
     if (fencedBlocks.length > 0) {
       // Prefer the first fenced block that looks like JSON; otherwise the first block.
-      const preferred =
-        fencedBlocks.find((block) => /^\s*[{\[]/.test(block)) ?? fencedBlocks[0];
+      const preferred = fencedBlocks.find((block) => /^\s*[{\[]/.test(block)) ?? fencedBlocks[0];
       text = preferred;
     } else {
-      text = text.replace(/```(?:json|JSON)?/gi, '').replace(/```/g, '').trim();
+      text = text
+        .replace(/```(?:json|JSON)?/gi, '')
+        .replace(/```/g, '')
+        .trim();
     }
 
     // Drop common prose prefixes such as "Here is the JSON:" before the payload.
@@ -432,11 +434,7 @@ export class SmartSkillTesterService {
       return null;
     }
 
-    const candidates = [
-      sanitized,
-      this.firstJsonObject(sanitized),
-      this.firstJsonArray(sanitized),
-    ];
+    const candidates = [sanitized, this.firstJsonObject(sanitized), this.firstJsonArray(sanitized)];
 
     for (const candidate of candidates) {
       if (!candidate) {
